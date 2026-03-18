@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/LegationPro/zagforge-mvp-impl/internal/provider"
 )
@@ -28,6 +29,7 @@ type Config struct {
 type Runner struct {
 	cloner RepoCloner
 	cfg    Config
+	wg     sync.WaitGroup
 }
 
 func New(cloner RepoCloner, cfg Config) *Runner {
@@ -37,12 +39,19 @@ func New(cloner RepoCloner, cfg Config) *Runner {
 // Dispatch satisfies handler.Dispatcher. It runs the job in a goroutine,
 // detached from the HTTP request context so the handler can return immediately.
 func (r *Runner) Dispatch(ctx context.Context, event provider.WebhookEvent) {
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
 		if err := r.Run(context.Background(), event); err != nil {
 			log.Printf("runner: job failed repo=%s branch=%s commit=%s: %v",
 				event.RepoName, event.Branch, event.CommitSHA, err)
 		}
 	}()
+}
+
+// Wait blocks until all in-flight jobs complete. Call during graceful shutdown.
+func (r *Runner) Wait() {
+	r.wg.Wait()
 }
 
 // Run executes the full job: generate token → clone → zigzag → cleanup.
