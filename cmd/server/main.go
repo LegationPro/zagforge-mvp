@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// This is a test
 func main() {
 	c, err := config.Load()
 	if err != nil {
