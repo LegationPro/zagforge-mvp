@@ -79,7 +79,7 @@ func (r *Runner) Run(ctx context.Context, event provider.WebhookEvent) error {
 	}
 
 	log.Printf("runner: running zigzag repo=%s reports=%s", event.RepoName, r.cfg.ReportsDir)
-	cmd := exec.CommandContext(ctx, r.cfg.ZigzagBin, "run", "--output-dir", r.cfg.ReportsDir)
+	cmd := exec.CommandContext(ctx, r.cfg.ZigzagBin, "run", "--no-watch", "--output-dir", r.cfg.ReportsDir)
 	cmd.Dir = repoDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("zigzag run: %w: %s", err, out)
