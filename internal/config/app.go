@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type AppConfig struct {
@@ -31,6 +32,8 @@ func LoadAppConfig() (*AppConfig, error) {
 	if privateKeyStr == "" {
 		return nil, notSetErr("GITHUB_APP_PRIVATE_KEY")
 	}
+	// Env vars often store PEM keys with literal \n instead of real newlines.
+	privateKeyStr = strings.ReplaceAll(privateKeyStr, `\n`, "\n")
 
 	return &AppConfig{
 		GithubAppID:            appID,
