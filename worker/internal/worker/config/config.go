@@ -14,6 +14,11 @@ const (
 	defaultMaxConcurrency = 5
 )
 
+type GCSConfig struct {
+	Bucket   string
+	Endpoint string
+}
+
 type Config struct {
 	DatabaseURL    string
 	AppEnv         string
@@ -23,6 +28,7 @@ type Config struct {
 	JobTimeout     time.Duration
 	MaxConcurrency int
 	GitHub         GitHubConfig
+	GCS            GCSConfig
 }
 
 type GitHubConfig struct {
@@ -78,6 +84,11 @@ func LoadConfig() (*Config, error) {
 		jobTimeout = d
 	}
 
+	gcsBucket := os.Getenv("GCS_BUCKET")
+	if gcsBucket == "" {
+		return nil, fmt.Errorf("GCS_BUCKET not set")
+	}
+
 	maxConcurrency := defaultMaxConcurrency
 	if raw := os.Getenv("MAX_CONCURRENCY"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -99,6 +110,10 @@ func LoadConfig() (*Config, error) {
 			AppID:         appID,
 			PrivateKey:    []byte(ghKey),
 			WebhookSecret: ghSecret,
+		},
+		GCS: GCSConfig{
+			Bucket:   gcsBucket,
+			Endpoint: os.Getenv("GCS_ENDPOINT"),
 		},
 	}, nil
 }

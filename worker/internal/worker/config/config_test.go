@@ -33,6 +33,7 @@ func validEnv() map[string]string {
 		"GITHUB_APP_ID":             "12345",
 		"GITHUB_APP_PRIVATE_KEY":    "test-key",
 		"GITHUB_APP_WEBHOOK_SECRET": "test-secret",
+		"GCS_BUCKET":               "test-bucket",
 	}
 }
 
