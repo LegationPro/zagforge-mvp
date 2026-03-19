@@ -10,6 +10,7 @@ import (
 
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/handler"
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
+	"go.uber.org/zap"
 )
 
 // mockValidator is a test double for provider.WebhookValidator.
@@ -52,7 +53,7 @@ func post(t *testing.T, h http.Handler, body []byte, signature, eventType string
 }
 
 func newHandler(v *mockValidator, svc *mockPushHandler) *handler.WebhookHandler {
-	return handler.NewWebhookHandler(v, svc)
+	return handler.NewWebhookHandler(v, svc, zap.NewNop())
 }
 
 func TestServeHTTP_missingSignature_returns401(t *testing.T) {

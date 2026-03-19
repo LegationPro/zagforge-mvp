@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,20 +14,28 @@ import (
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/handler"
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/runner"
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/service"
+	"github.com/LegationPro/zagforge-mvp-impl/shared/go/logger"
 	"github.com/LegationPro/zagforge-mvp-impl/shared/go/router"
 
 	githubprovider "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
+	"go.uber.org/zap"
 )
 
-func main() {
+func run() error {
 	c, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		return fmt.Errorf("load config: %w", err)
 	}
+
+	log, err := logger.New(os.Getenv("APP_ENV"))
+	if err != nil {
+		return fmt.Errorf("init logger: %w", err)
+	}
+	defer log.Sync()
 
 	pool, err := db.Connect(context.Background(), c.DB.URL)
 	if err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
+		return fmt.Errorf("connect to db: %w", err)
 	}
 	defer pool.Close()
 
@@ -34,22 +43,22 @@ func main() {
 
 	client, err := githubprovider.NewAPIClient(c.App.GithubAppID, []byte(c.App.GithubAppPrivateKey), c.App.GithubAppWebhookSecret)
 	if err != nil {
-		log.Fatalf("failed to create API client: %v", err)
+		return fmt.Errorf("create API client: %w", err)
 	}
 
 	ch, err := githubprovider.NewClientHandler(client)
 	if err != nil {
-		log.Fatalf("failed to create client handler: %v", err)
+		return fmt.Errorf("create client handler: %w", err)
 	}
 
 	run := runner.New(ch, runner.Config{
 		WorkspaceDir: c.Worker.WorkspaceDir,
 		ZigzagBin:    c.Worker.ZigzagBin,
 		ReportsDir:   c.Worker.ReportsDir,
-	})
+	}, log)
 
-	svc := service.NewJobService(database, run)
-	wh := handler.NewWebhookHandler(ch, svc)
+	svc := service.NewJobService(database, run, log)
+	wh := handler.NewWebhookHandler(ch, svc, log)
 
 	r := router.New()
 
@@ -57,7 +66,7 @@ func main() {
 	if err := internal.Create([]router.Subroute{
 		{Method: router.POST, Path: "/internal/webhooks/github", Handler: wh.ServeHTTP},
 	}); err != nil {
-		log.Fatalf("failed to register routes: %v", err)
+		return fmt.Errorf("register routes: %w", err)
 	}
 
 	srv := &http.Server{
@@ -66,9 +75,9 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("server listening on :%s", c.Server.Port)
+		log.Info("server listening", zap.String("port", c.Server.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			log.Fatal("server error", zap.Error(err))
 		}
 	}()
 
@@ -76,15 +85,23 @@ func main() {
 	defer cancel()
 	<-ctx.Done()
 
-	log.Println("shutting down server...")
+	log.Info("shutting down server")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("server shutdown failed: %v", err)
+		return fmt.Errorf("server shutdown: %w", err)
 	}
 
-	log.Println("waiting for in-flight jobs to complete...")
+	log.Info("waiting for in-flight jobs to complete")
 	run.Wait()
-	log.Println("server stopped")
+	log.Info("server stopped")
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
 }

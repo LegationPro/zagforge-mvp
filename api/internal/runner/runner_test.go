@@ -9,6 +9,7 @@ import (
 
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/runner"
+	"go.uber.org/zap"
 )
 
 // mockCloner is a test double for runner.RepoCloner.
@@ -47,7 +48,7 @@ func newRunner(t *testing.T, cloner *mockCloner) *runner.Runner {
 		WorkspaceDir: t.TempDir(),
 		ZigzagBin:    mockZigzag(t),
 		ReportsDir:   t.TempDir(),
-	})
+	}, zap.NewNop())
 }
 
 func TestRun_success(t *testing.T) {
@@ -99,7 +100,7 @@ func TestRun_zigzagError(t *testing.T) {
 		WorkspaceDir: t.TempDir(),
 		ZigzagBin:    failBin,
 		ReportsDir:   t.TempDir(),
-	})
+	}, zap.NewNop())
 
 	err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
 	if err == nil {

@@ -3,13 +3,13 @@ package runner
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
+	"go.uber.org/zap"
 )
 
 // RepoCloner is the subset of provider.Worker the runner needs.
@@ -29,11 +29,12 @@ type Config struct {
 type Runner struct {
 	cloner RepoCloner
 	cfg    Config
+	log    *zap.Logger
 	wg     sync.WaitGroup
 }
 
-func New(cloner RepoCloner, cfg Config) *Runner {
-	return &Runner{cloner: cloner, cfg: cfg}
+func New(cloner RepoCloner, cfg Config, log *zap.Logger) *Runner {
+	return &Runner{cloner: cloner, cfg: cfg, log: log}
 }
 
 // Dispatch satisfies handler.Dispatcher. It runs the job in a goroutine,
@@ -41,8 +42,12 @@ func New(cloner RepoCloner, cfg Config) *Runner {
 func (r *Runner) Dispatch(ctx context.Context, event github.WebhookEvent) {
 	r.wg.Go(func() {
 		if err := r.Run(context.Background(), event); err != nil {
-			log.Printf("runner: job failed repo=%s branch=%s commit=%s: %v",
-				event.RepoName, event.Branch, event.CommitSHA, err)
+			r.log.Error("job failed",
+				zap.String("repo", event.RepoName),
+				zap.String("branch", event.Branch),
+				zap.String("commit", event.CommitSHA),
+				zap.Error(err),
+			)
 		}
 	})
 }
@@ -54,7 +59,11 @@ func (r *Runner) Wait() {
 
 // Run executes the full job: generate token → clone → zigzag → cleanup.
 func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
-	log.Printf("runner: starting job repo=%s branch=%s commit=%s", event.RepoName, event.Branch, event.CommitSHA)
+	r.log.Info("starting job",
+		zap.String("repo", event.RepoName),
+		zap.String("branch", event.Branch),
+		zap.String("commit", event.CommitSHA),
+	)
 
 	token, err := r.cloner.GenerateCloneToken(ctx, event.InstallationID)
 	if err != nil {
@@ -71,9 +80,8 @@ func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
 	}
 
 	defer func(workDir string) {
-		err = os.RemoveAll(workDir)
-		if err != nil {
-			log.Printf("runner: failed to remove work dir: %v", err)
+		if err := os.RemoveAll(workDir); err != nil {
+			r.log.Warn("failed to remove work dir", zap.String("path", workDir), zap.Error(err))
 		}
 	}(workDir)
 
@@ -82,14 +90,21 @@ func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
 		return fmt.Errorf("clone repo: %w", err)
 	}
 
-	log.Printf("runner: running zigzag repo=%s reports=%s", event.RepoName, r.cfg.ReportsDir)
+	r.log.Info("running zigzag",
+		zap.String("repo", event.RepoName),
+		zap.String("reports_dir", r.cfg.ReportsDir),
+	)
 	cmd := exec.CommandContext(ctx, r.cfg.ZigzagBin, "run", "--no-watch", "--output-dir", r.cfg.ReportsDir)
 	cmd.Dir = repoDir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("zigzag run: %w: %s", err, out)
 	}
 
-	log.Printf("runner: job complete repo=%s branch=%s commit=%s reports=%s",
-		event.RepoName, event.Branch, event.CommitSHA, r.cfg.ReportsDir)
+	r.log.Info("job complete",
+		zap.String("repo", event.RepoName),
+		zap.String("branch", event.Branch),
+		zap.String("commit", event.CommitSHA),
+		zap.String("reports_dir", r.cfg.ReportsDir),
+	)
 	return nil
 }

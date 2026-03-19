@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge-mvp-impl/api/internal/db"
 	dbsqlc "github.com/LegationPro/zagforge-mvp-impl/api/internal/db/sqlc"
@@ -28,10 +28,11 @@ type dispatcher interface {
 type JobService struct {
 	db  *dbpkg.DB
 	run dispatcher
+	log *zap.Logger
 }
 
-func NewJobService(db *dbpkg.DB, run dispatcher) *JobService {
-	return &JobService{db: db, run: run}
+func NewJobService(db *dbpkg.DB, run dispatcher, log *zap.Logger) *JobService {
+	return &JobService{db: db, run: run, log: log}
 }
 
 // HandlePush persists a new queued job for the push event (with dedup) then dispatches it.
@@ -45,7 +46,7 @@ func (s *JobService) HandlePush(ctx context.Context, event github.WebhookEvent, 
 
 	defer func() {
 		if err := tx.Rollback(context.Background()); err != nil && err != sql.ErrTxDone {
-			log.Printf("job service: rollback error: %v", err)
+			s.log.Warn("rollback error", zap.Error(err))
 		}
 	}()
 
@@ -55,8 +56,11 @@ func (s *JobService) HandlePush(ctx context.Context, event github.WebhookEvent, 
 	repo, err := qtx.GetRepoByGithubID(ctx, event.RepoID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Printf("job service: repo not registered github_id=%d name=%s installation=%d — skipping",
-				event.RepoID, event.RepoName, event.InstallationID)
+			s.log.Warn("repo not registered, skipping",
+				zap.Int64("github_id", event.RepoID),
+				zap.String("name", event.RepoName),
+				zap.Int64("installation", event.InstallationID),
+			)
 			return nil
 		}
 		return fmt.Errorf("get repo: %w", err)

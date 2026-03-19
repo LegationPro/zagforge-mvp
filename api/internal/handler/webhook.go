@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
+	"go.uber.org/zap"
 )
 
 const maxPayloadBytes = 25 * 1024 * 1024
@@ -27,10 +27,11 @@ type pushHandler interface {
 type WebhookHandler struct {
 	validator github.WebhookValidator
 	svc       pushHandler
+	log       *zap.Logger
 }
 
-func NewWebhookHandler(v github.WebhookValidator, svc pushHandler) *WebhookHandler {
-	return &WebhookHandler{validator: v, svc: svc}
+func NewWebhookHandler(v github.WebhookValidator, svc pushHandler, log *zap.Logger) *WebhookHandler {
+	return &WebhookHandler{validator: v, svc: svc, log: log}
 }
 
 func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -53,28 +54,32 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eventType := r.Header.Get("X-GitHub-Event")
 	event, err := h.validator.ValidateWebhook(r.Context(), body, signature, eventType)
 	if errors.Is(err, github.ErrInvalidSignature) {
-		log.Printf("webhook: invalid signature event=%s", eventType)
+		h.log.Warn("invalid signature", zap.String("event", eventType))
 		http.Error(w, "invalid signature", http.StatusUnauthorized)
 		return
 	}
 	if err != nil {
-		log.Printf("webhook: validation error event=%s: %v", eventType, err)
+		h.log.Error("validation error", zap.String("event", eventType), zap.Error(err))
 		http.Error(w, "validation error", http.StatusInternalServerError)
 		return
 	}
 
 	if !supportedEvents[event.EventType] {
-		log.Printf("webhook: ignoring unsupported event=%s", event.EventType)
+		h.log.Info("ignoring unsupported event", zap.String("event", event.EventType))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	deliveryID := r.Header.Get("X-GitHub-Delivery")
-	log.Printf("webhook: dispatching event=%s repo=%s branch=%s commit=%s",
-		event.EventType, event.RepoName, event.Branch, event.CommitSHA)
+	h.log.Info("dispatching webhook",
+		zap.String("event", event.EventType),
+		zap.String("repo", event.RepoName),
+		zap.String("branch", event.Branch),
+		zap.String("commit", event.CommitSHA),
+	)
 
 	if err := h.svc.HandlePush(r.Context(), event, deliveryID); err != nil {
-		log.Printf("webhook: handle push error: %v", err)
+		h.log.Error("handle push failed", zap.Error(err))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
