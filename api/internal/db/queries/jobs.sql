@@ -16,6 +16,16 @@ SET status = 'superseded'
 WHERE id = $1
   AND status = 'queued';
 
+-- name: GetJobByID :one
+SELECT * FROM jobs WHERE id = $1;
+
+-- name: ListJobsByRepo :many
+SELECT * FROM jobs
+WHERE repo_id = $1
+  AND created_at < $2
+ORDER BY created_at DESC
+LIMIT $3;
+
 -- name: UpdateJobStatus :exec
 UPDATE jobs
 SET status = $2,
