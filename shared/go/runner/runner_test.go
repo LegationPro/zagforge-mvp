@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LegationPro/zagforge-mvp-impl/api/internal/runner"
+	"github.com/LegationPro/zagforge-mvp-impl/shared/go/runner"
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"go.uber.org/zap"
 )
