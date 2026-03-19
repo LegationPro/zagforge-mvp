@@ -66,6 +66,10 @@ func run() error {
 	}
 
 	signer := jobtoken.NewSigner([]byte(cfg.HMACSigningKey), 30*time.Minute)
+	if cfg.HMACSigningKeyPrev != "" {
+		signer = signer.WithPreviousKey([]byte(cfg.HMACSigningKeyPrev))
+		log.Info("HMAC key rotation active: accepting both current and previous signing keys")
+	}
 	api := apiclient.NewClient(cfg.APIBaseURL, signer, log)
 
 	r := runner.New(ch, runner.Config{

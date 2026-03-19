@@ -15,6 +15,7 @@ var allEnvVars = []string{
 	"WORKSPACE_DIR", "ZIGZAG_BIN", "REPORTS_DIR",
 	"JOB_TIMEOUT", "MAX_CONCURRENCY",
 	"WORKER_MODE", "PORT",
+	"HMAC_SIGNING_KEY_PREV",
 }
 
 func setEnv(t *testing.T, vars map[string]string) {

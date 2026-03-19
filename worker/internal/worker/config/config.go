@@ -31,7 +31,8 @@ type Config struct {
 	JobTimeout     time.Duration `env:"JOB_TIMEOUT"        envDefault:"5m"`
 	MaxConcurrency int           `env:"MAX_CONCURRENCY"    envDefault:"5"`
 	APIBaseURL     string        `env:"API_BASE_URL,required"`
-	HMACSigningKey string        `env:"HMAC_SIGNING_KEY,required"`
+	HMACSigningKey     string        `env:"HMAC_SIGNING_KEY,required"`
+	HMACSigningKeyPrev string        `env:"HMAC_SIGNING_KEY_PREV"`
 	WorkerMode     string        `env:"WORKER_MODE"        envDefault:"poll"`
 	Port           string        `env:"PORT"               envDefault:"8080"`
 	GitHub         GitHubConfig  `envPrefix:""`

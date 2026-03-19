@@ -14,6 +14,7 @@ var allEnvVars = []string{
 	"DATABASE_URL", "REDIS_URL",
 	"GCS_BUCKET", "GCS_ENDPOINT",
 	"CLOUD_TASKS_PROJECT", "CLOUD_TASKS_LOCATION", "CLOUD_TASKS_QUEUE", "CLOUD_TASKS_WORKER_URL",
+	"HMAC_SIGNING_KEY_PREV",
 }
 
 // setEnv saves originals, sets the provided map, and unsets everything else in allEnvVars.

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TaskEnqueuer enqueues a job for worker execution.
@@ -38,6 +40,8 @@ func NewCloudTasksEnqueuer(ctx context.Context, cfg CloudTasksConfig) (*CloudTas
 }
 
 // Enqueue creates an HTTP task targeting the worker's /run endpoint.
+// Retry policy (max attempts: 3, min backoff: 10s, max backoff: 300s,
+// max doublings: 4) is configured at the queue level.
 func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, jobID string, jobToken string) error {
 	queuePath := fmt.Sprintf("projects/%s/locations/%s/queues/%s",
 		e.cfg.Project, e.cfg.Location, e.cfg.Queue)
@@ -53,6 +57,8 @@ func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, jobID string, jobToken
 	req := &taskspb.CreateTaskRequest{
 		Parent: queuePath,
 		Task: &taskspb.Task{
+			// Task-level timeout: 20 minutes (aligned with watchdog).
+			DispatchDeadline: durationpb.New(20 * time.Minute),
 			MessageType: &taskspb.Task_HttpRequest{
 				HttpRequest: &taskspb.HttpRequest{
 					HttpMethod: taskspb.HttpMethod_POST,

@@ -81,6 +81,10 @@ func run() error {
 	clerk.SetKey(c.App.ClerkSecretKey)
 
 	signer := jobtoken.NewSigner([]byte(c.App.HMACSigningKey), 30*time.Minute)
+	if c.App.HMACSigningKeyPrev != "" {
+		signer = signer.WithPreviousKey([]byte(c.App.HMACSigningKeyPrev))
+		log.Info("HMAC key rotation active: accepting both current and previous signing keys")
+	}
 
 	// Cloud Tasks enqueuer (or noop for local dev).
 	var enqueuer engine.TaskEnqueuer

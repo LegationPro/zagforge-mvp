@@ -6,5 +6,6 @@ type AppConfig struct {
 	GithubAppWebhookSecret string `env:"GITHUB_APP_WEBHOOK_SECRET,required"`
 	ClerkSecretKey         string `env:"CLERK_SECRET_KEY,required"`
 	HMACSigningKey         string `env:"HMAC_SIGNING_KEY,required"`
+	HMACSigningKeyPrev     string `env:"HMAC_SIGNING_KEY_PREV"` // previous key for rotation grace period
 	WatchdogSecret         string `env:"WATCHDOG_SECRET,required"`
 }
