@@ -4,3 +4,4 @@
 .cache
 zigzag-reports
 .reports/
+.DS_Store
