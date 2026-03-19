@@ -20,10 +20,10 @@ const jobIDKey contextKey = "job_id"
 const maxBodyBytes = 1 * 1024 * 1024 // 1 MB
 
 var (
-	ErrMissingToken    = errors.New("missing authorization token")
-	ErrInvalidToken    = errors.New("invalid or expired token")
-	ErrInvalidBody     = errors.New("failed to read body")
-	ErrMissingJobID    = errors.New("missing or invalid job_id")
+	ErrMissingToken = errors.New("missing authorization token")
+	ErrInvalidToken = errors.New("invalid or expired token")
+	ErrInvalidBody  = errors.New("failed to read body")
+	ErrMissingJobID = errors.New("missing or invalid job_id")
 )
 
 // JobIDFromContext retrieves the validated job ID from the request context.
