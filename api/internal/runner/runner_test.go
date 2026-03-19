@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/runner"
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
@@ -163,5 +165,118 @@ func TestRun_zigzagError(t *testing.T) {
 	_, err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
 	if err == nil {
 		t.Fatal("expected error from zigzag failure, got nil")
+	}
+}
+
+// -- InFlight / Drain tests --
+
+func TestInFlight_tracksRunningJobs(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, _ := newRunner(t, cloner)
+
+	if n := r.InFlight(); n != 0 {
+		t.Fatalf("expected 0 in-flight, got %d", n)
+	}
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	r.GoWait(func() {
+		close(started)
+		<-release
+	})
+
+	<-started
+	if n := r.InFlight(); n != 1 {
+		t.Fatalf("expected 1 in-flight, got %d", n)
+	}
+
+	close(release)
+	r.Wait()
+
+	if n := r.InFlight(); n != 0 {
+		t.Fatalf("expected 0 in-flight after wait, got %d", n)
+	}
+}
+
+func TestDrain_completesWhenJobsFinish(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, _ := newRunner(t, cloner)
+
+	release := make(chan struct{})
+	r.GoWait(func() {
+		<-release
+	})
+
+	// Release the job after a short delay.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(release)
+	}()
+
+	err := r.Drain(5*time.Second, 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("expected drain to succeed, got: %v", err)
+	}
+}
+
+func TestDrain_timesOutWithRemainingJobs(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, _ := newRunner(t, cloner)
+
+	release := make(chan struct{})
+	r.GoWait(func() {
+		<-release
+	})
+	defer close(release) // cleanup
+
+	err := r.Drain(100*time.Millisecond, 25*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected drain timeout error, got nil")
+	}
+}
+
+func TestDrain_noJobs_returnsImmediately(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, _ := newRunner(t, cloner)
+
+	start := time.Now()
+	err := r.Drain(5*time.Second, 1*time.Second)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("expected fast return, took %s", elapsed)
+	}
+}
+
+func TestInFlight_multipleJobs(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, _ := newRunner(t, cloner)
+
+	const n = 5
+	var started sync.WaitGroup
+	release := make(chan struct{})
+
+	started.Add(n)
+	for range n {
+		r.GoWait(func() {
+			started.Done()
+			<-release
+		})
+	}
+
+	started.Wait()
+	if got := r.InFlight(); got != n {
+		t.Fatalf("expected %d in-flight, got %d", n, got)
+	}
+
+	close(release)
+	r.Wait()
+
+	if got := r.InFlight(); got != 0 {
+		t.Fatalf("expected 0 in-flight after wait, got %d", got)
 	}
 }

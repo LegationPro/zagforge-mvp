@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"go.uber.org/zap"
@@ -38,10 +39,11 @@ type Result struct {
 
 // Runner clones a repo, runs zigzag, then cleans up the temporary clone.
 type Runner struct {
-	cloner RepoCloner
-	cfg    Config
-	log    *zap.Logger
-	wg     sync.WaitGroup
+	cloner   RepoCloner
+	cfg      Config
+	log      *zap.Logger
+	wg       sync.WaitGroup
+	inflight atomic.Int64
 }
 
 func New(cloner RepoCloner, cfg Config, log *zap.Logger) *Runner {
@@ -51,12 +53,54 @@ func New(cloner RepoCloner, cfg Config, log *zap.Logger) *Runner {
 // GoWait runs fn in a goroutine tracked by the runner's WaitGroup.
 // Used by the service layer to run jobs while preserving graceful shutdown.
 func (r *Runner) GoWait(fn func()) {
-	r.wg.Go(fn)
+	r.inflight.Add(1)
+	r.wg.Go(func() {
+		defer r.inflight.Add(-1)
+		fn()
+	})
+}
+
+// InFlight returns the number of currently running jobs.
+func (r *Runner) InFlight() int64 {
+	return r.inflight.Load()
 }
 
 // Wait blocks until all in-flight jobs complete. Call during graceful shutdown.
 func (r *Runner) Wait() {
 	r.wg.Wait()
+}
+
+// Drain waits for in-flight jobs to finish, logging progress every tick.
+// If the hard timeout is reached, it returns an error with the remaining count.
+func (r *Runner) Drain(timeout time.Duration, tick time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+
+	deadline := time.After(timeout)
+
+	for {
+		select {
+		case <-done:
+			r.log.Info("all jobs drained")
+			return nil
+		case <-ticker.C:
+			n := r.inflight.Load()
+			r.log.Info("draining in-flight jobs", zap.Int64("remaining", n))
+		case <-deadline:
+			n := r.inflight.Load()
+			if n == 0 {
+				return nil
+			}
+			r.log.Error("drain timeout reached, abandoning jobs", zap.Int64("remaining", n))
+			return fmt.Errorf("drain timeout: %d jobs still running", n)
+		}
+	}
 }
 
 // Run executes the full job: generate token → clone → zigzag → cleanup.
