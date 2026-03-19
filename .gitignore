@@ -3,3 +3,4 @@
 .bin/
 .cache
 zigzag-reports
+.reports/
