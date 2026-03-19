@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
-	dbpkg "github.com/LegationPro/zagforge-mvp-impl/shared/go/db"
-	store "github.com/LegationPro/zagforge-mvp-impl/shared/go/db/sqlc"
+	dbpkg "github.com/LegationPro/zagforge-mvp-impl/api/internal/db"
+	"github.com/LegationPro/zagforge-mvp-impl/shared/go/store"
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 )
 
