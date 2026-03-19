@@ -142,6 +142,64 @@ func (h *ClientHandler) CloneRepo(ctx context.Context, repoURL, ref, token, dst 
 	return nil
 }
 
+// ListRepos returns all repositories accessible to the given installation.
+// It paginates through the GitHub API until all repos are collected.
 func (h *ClientHandler) ListRepos(ctx context.Context, installationID int64) ([]Repo, error) {
-	return nil, nil // TODO
+	token, err := h.GenerateCloneToken(ctx, installationID)
+	if err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+
+	var repos []Repo
+	page := 1
+
+	for {
+		url := fmt.Sprintf("%s/installation/repositories?per_page=100&page=%d", h.client.apiBaseURL, page)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+
+		req.Header.Set("Authorization", "token "+token)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", GithubApiVersion)
+
+		resp, err := h.client.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("list repos: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, body)
+		}
+
+		var result struct {
+			TotalCount   int `json:"total_count"`
+			Repositories []struct {
+				ID            int64  `json:"id"`
+				FullName      string `json:"full_name"`
+				DefaultBranch string `json:"default_branch"`
+			} `json:"repositories"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("decode response: %w", err)
+		}
+
+		for _, r := range result.Repositories {
+			repos = append(repos, Repo{
+				ID:            r.ID,
+				FullName:      r.FullName,
+				DefaultBranch: r.DefaultBranch,
+			})
+		}
+
+		if len(repos) >= result.TotalCount {
+			break
+		}
+		page++
+	}
+
+	return repos, nil
 }
