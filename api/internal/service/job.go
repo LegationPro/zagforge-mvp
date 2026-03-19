@@ -45,7 +45,7 @@ func (s *JobService) HandlePush(ctx context.Context, event github.WebhookEvent, 
 	}
 
 	defer func() {
-		if err := tx.Rollback(context.Background()); err != nil && err != sql.ErrTxDone {
+		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, sql.ErrTxDone) && err.Error() != "tx is closed" {
 			s.log.Warn("rollback error", zap.Error(err))
 		}
 	}()
