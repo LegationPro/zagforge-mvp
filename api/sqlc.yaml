@@ -1,12 +1,12 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "internal/db/queries"
+    queries: "../shared/go/store/queries"
     schema: "internal/db/migrations"
     gen:
       go:
-        package: "dbsqlc"
-        out: "internal/db/sqlc"
+        package: "store"
+        out: "../shared/go/store"
         sql_package: "pgx/v5"
         overrides:
           - column: "jobs.status"
