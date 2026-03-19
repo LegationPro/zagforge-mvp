@@ -23,11 +23,12 @@ type RepoCloner interface {
 	CloneRepo(ctx context.Context, repoURL, ref, token, dst string) error
 }
 
-// Config holds runner settings, all resolvable from environment variables via config.LoadWorkerConfig.
+// Config holds runner settings, all resolvable from environment variables.
 type Config struct {
-	WorkspaceDir string // base dir for temporary clone directories
-	ZigzagBin    string // path to the zigzag binary
-	ReportsDir   string // absolute path where zigzag writes reports
+	WorkspaceDir string        // base dir for temporary clone directories
+	ZigzagBin    string        // path to the zigzag binary
+	ReportsDir   string        // absolute path where zigzag writes reports
+	JobTimeout   time.Duration // hard timeout per job (0 = no timeout)
 }
 
 // Result holds metadata about a successful zigzag run.
@@ -105,6 +106,12 @@ func (r *Runner) Drain(timeout time.Duration, tick time.Duration) error {
 
 // Run executes the full job: generate token → clone → zigzag → cleanup.
 func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) (*Result, error) {
+	if r.cfg.JobTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.cfg.JobTimeout)
+		defer cancel()
+	}
+
 	r.log.Info("starting job",
 		zap.String("repo", event.RepoName),
 		zap.String("branch", event.Branch),

@@ -8,7 +8,7 @@ tmp_dir = "/app/api/tmp"
 [build]
   args_bin = []
   bin = "/app/api/tmp/server"
-  cmd = "cd /app && go build -o /usr/local/bin/zagforge-worker ./worker/cmd/ && cd /app/api && go build -o ./tmp/server ./cmd/"
+  cmd = "cd /app/api && go build -o ./tmp/server ./cmd/"
   delay = 1000
   entrypoint = ["/app/api/tmp/server"]
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "internal/db/sqlc"]
@@ -18,7 +18,7 @@ tmp_dir = "/app/api/tmp"
   follow_symlink = false
   full_bin = ""
   ignore_dangerous_root_dir = false
-  include_dir = ["api", "shared/go", "worker"]
+  include_dir = ["api", "shared/go"]
   include_ext = ["go", "tpl", "tmpl", "html"]
   include_file = []
   kill_delay = "0s"

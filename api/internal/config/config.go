@@ -18,7 +18,6 @@ type DBConfig struct {
 type Config struct {
 	App    *AppConfig
 	Server *ServerConfig
-	Worker *WorkerConfig
 	DB     *DBConfig
 }
 
@@ -40,13 +39,9 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	worker, err := LoadWorkerConfig()
-	if err != nil {
-		return nil, err
-	}
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		return nil, notSetErr("DATABASE_URL")
 	}
-	return &Config{App: app, Server: server, Worker: worker, DB: &DBConfig{URL: dbURL}}, nil
+	return &Config{App: app, Server: server, DB: &DBConfig{URL: dbURL}}, nil
 }
