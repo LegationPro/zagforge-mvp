@@ -2,14 +2,18 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // RepoCloner is the subset of provider.Worker the runner needs.
@@ -25,6 +29,13 @@ type Config struct {
 	ReportsDir   string // absolute path where zigzag writes reports
 }
 
+// Result holds metadata about a successful zigzag run.
+type Result struct {
+	ReportsDir    string
+	ZigzagVersion string
+	SizeBytes     int64
+}
+
 // Runner clones a repo, runs zigzag, then cleans up the temporary clone.
 type Runner struct {
 	cloner RepoCloner
@@ -37,19 +48,10 @@ func New(cloner RepoCloner, cfg Config, log *zap.Logger) *Runner {
 	return &Runner{cloner: cloner, cfg: cfg, log: log}
 }
 
-// Dispatch satisfies handler.Dispatcher. It runs the job in a goroutine,
-// detached from the HTTP request context so the handler can return immediately.
-func (r *Runner) Dispatch(ctx context.Context, event github.WebhookEvent) {
-	r.wg.Go(func() {
-		if err := r.Run(context.Background(), event); err != nil {
-			r.log.Error("job failed",
-				zap.String("repo", event.RepoName),
-				zap.String("branch", event.Branch),
-				zap.String("commit", event.CommitSHA),
-				zap.Error(err),
-			)
-		}
-	})
+// GoWait runs fn in a goroutine tracked by the runner's WaitGroup.
+// Used by the service layer to run jobs while preserving graceful shutdown.
+func (r *Runner) GoWait(fn func()) {
+	r.wg.Go(fn)
 }
 
 // Wait blocks until all in-flight jobs complete. Call during graceful shutdown.
@@ -58,7 +60,7 @@ func (r *Runner) Wait() {
 }
 
 // Run executes the full job: generate token → clone → zigzag → cleanup.
-func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
+func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) (*Result, error) {
 	r.log.Info("starting job",
 		zap.String("repo", event.RepoName),
 		zap.String("branch", event.Branch),
@@ -67,16 +69,16 @@ func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
 
 	token, err := r.cloner.GenerateCloneToken(ctx, event.InstallationID)
 	if err != nil {
-		return fmt.Errorf("generate clone token: %w", err)
+		return nil, fmt.Errorf("generate clone token: %w", err)
 	}
 
 	if err := os.MkdirAll(r.cfg.WorkspaceDir, 0o755); err != nil {
-		return fmt.Errorf("create workspace dir: %w", err)
+		return nil, fmt.Errorf("create workspace dir: %w", err)
 	}
 
 	workDir, err := os.MkdirTemp(r.cfg.WorkspaceDir, "job-*")
 	if err != nil {
-		return fmt.Errorf("create work dir: %w", err)
+		return nil, fmt.Errorf("create work dir: %w", err)
 	}
 
 	defer func(workDir string) {
@@ -87,7 +89,7 @@ func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
 
 	repoDir := filepath.Join(workDir, "repo")
 	if err := r.cloner.CloneRepo(ctx, event.CloneURL, event.Branch, token, repoDir); err != nil {
-		return fmt.Errorf("clone repo: %w", err)
+		return nil, fmt.Errorf("clone repo: %w", err)
 	}
 
 	r.log.Info("running zigzag",
@@ -97,14 +99,88 @@ func (r *Runner) Run(ctx context.Context, event github.WebhookEvent) error {
 	cmd := exec.CommandContext(ctx, r.cfg.ZigzagBin, "run", "--no-watch", "--output-dir", r.cfg.ReportsDir)
 	cmd.Dir = repoDir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("zigzag run: %w: %s", err, out)
+		return nil, fmt.Errorf("zigzag run: %w: %s", err, out)
+	}
+
+	result, err := collectResult(r.cfg.ReportsDir)
+	if err != nil {
+		return nil, fmt.Errorf("collect result: %w", err)
 	}
 
 	r.log.Info("job complete",
 		zap.String("repo", event.RepoName),
 		zap.String("branch", event.Branch),
 		zap.String("commit", event.CommitSHA),
-		zap.String("reports_dir", r.cfg.ReportsDir),
+		zap.String("zigzag_version", result.ZigzagVersion),
+		zap.Int64("size_bytes", result.SizeBytes),
 	)
-	return nil
+	return result, nil
+}
+
+// collectResult reads report.json for the zigzag version and sums the total
+// size of all files in the reports directory. Both operations run concurrently.
+func collectResult(reportsDir string) (*Result, error) {
+	var (
+		version   string
+		totalSize atomic.Int64
+	)
+
+	g, _ := errgroup.WithContext(context.Background())
+
+	// Parse zigzag version from report.json.
+	g.Go(func() error {
+		data, err := os.ReadFile(filepath.Join(reportsDir, "report.json"))
+		if err != nil {
+			return fmt.Errorf("read report.json: %w", err)
+		}
+		var report struct {
+			Meta struct {
+				Version string `json:"version"`
+			} `json:"meta"`
+		}
+		if err := json.Unmarshal(data, &report); err != nil {
+			return fmt.Errorf("parse report.json: %w", err)
+		}
+		version = report.Meta.Version
+		return nil
+	})
+
+	// Walk directory and stat files concurrently.
+	g.Go(func() error {
+		// Collect file paths first, then stat in parallel.
+		var paths []string
+		err := filepath.WalkDir(reportsDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			paths = append(paths, path)
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("walk reports dir: %w", err)
+		}
+
+		var wg sync.WaitGroup
+		for _, p := range paths {
+			wg.Add(1)
+			go func(path string) {
+				defer wg.Done()
+				if info, err := os.Stat(path); err == nil {
+					totalSize.Add(info.Size())
+				}
+			}(p)
+		}
+		wg.Wait()
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &Result{
+		ReportsDir:    reportsDir,
+		ZigzagVersion: version,
+		SizeBytes:     totalSize.Load(),
+	}, nil
 }

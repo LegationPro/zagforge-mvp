@@ -2,13 +2,14 @@ package runner_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"github.com/LegationPro/zagforge-mvp-impl/api/internal/runner"
+	github "github.com/LegationPro/zagforge-mvp-impl/shared/go/provider/github"
 	"go.uber.org/zap"
 )
 
@@ -31,29 +32,47 @@ func (m *mockCloner) CloneRepo(_ context.Context, _, _, _, dst string) error {
 	return os.MkdirAll(dst, 0o755)
 }
 
-// mockZigzag writes a tiny shell script that exits 0, returning its path.
+// mockZigzag writes a shell script that produces a report.json in the --output-dir.
 func mockZigzag(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "zigzag")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	// The script parses --output-dir from args and writes report.json there.
+	script := `#!/bin/sh
+OUTDIR=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output-dir) OUTDIR="$2"; shift 2;;
+    *) shift;;
+  esac
+done
+if [ -n "$OUTDIR" ]; then
+  mkdir -p "$OUTDIR"
+  cat > "$OUTDIR/report.json" <<'ENDJSON'
+{"meta":{"version":"0.15.1"}}
+ENDJSON
+fi
+exit 0
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("failed to write mock zigzag: %v", err)
 	}
 	return path
 }
 
-func newRunner(t *testing.T, cloner *mockCloner) *runner.Runner {
+func newRunner(t *testing.T, cloner *mockCloner) (*runner.Runner, runner.Config) {
 	t.Helper()
-	return runner.New(cloner, runner.Config{
+	cfg := runner.Config{
 		WorkspaceDir: t.TempDir(),
 		ZigzagBin:    mockZigzag(t),
 		ReportsDir:   t.TempDir(),
-	}, zap.NewNop())
+	}
+	return runner.New(cloner, cfg, zap.NewNop()), cfg
 }
 
 func TestRun_success(t *testing.T) {
 	cloner := &mockCloner{token: "ghs_test"}
-	r := newRunner(t, cloner)
+	r, _ := newRunner(t, cloner)
 
 	event := github.WebhookEvent{
 		RepoName:       "org/repo",
@@ -63,16 +82,55 @@ func TestRun_success(t *testing.T) {
 		InstallationID: 42,
 	}
 
-	if err := r.Run(context.Background(), event); err != nil {
+	result, err := r.Run(context.Background(), event)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.ZigzagVersion != "0.15.1" {
+		t.Errorf("expected zigzag version %q, got %q", "0.15.1", result.ZigzagVersion)
+	}
+	if result.SizeBytes <= 0 {
+		t.Errorf("expected positive size, got %d", result.SizeBytes)
+	}
+}
+
+func TestRun_success_reportsDir_containsReportJSON(t *testing.T) {
+	cloner := &mockCloner{token: "ghs_test"}
+	r, cfg := newRunner(t, cloner)
+
+	result, err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify report.json exists in the reports dir.
+	reportPath := filepath.Join(cfg.ReportsDir, "report.json")
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("report.json not found: %v", err)
+	}
+
+	var report struct {
+		Meta struct {
+			Version string `json:"version"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("invalid report.json: %v", err)
+	}
+	if report.Meta.Version != result.ZigzagVersion {
+		t.Errorf("version mismatch: report.json=%q result=%q", report.Meta.Version, result.ZigzagVersion)
 	}
 }
 
 func TestRun_tokenError(t *testing.T) {
 	cloner := &mockCloner{tokenErr: errors.New("auth failed")}
-	r := newRunner(t, cloner)
+	r, _ := newRunner(t, cloner)
 
-	err := r.Run(context.Background(), github.WebhookEvent{})
+	_, err := r.Run(context.Background(), github.WebhookEvent{})
 	if err == nil {
 		t.Fatal("expected error from token failure, got nil")
 	}
@@ -80,9 +138,9 @@ func TestRun_tokenError(t *testing.T) {
 
 func TestRun_cloneError(t *testing.T) {
 	cloner := &mockCloner{token: "ghs_test", cloneErr: errors.New("clone failed")}
-	r := newRunner(t, cloner)
+	r, _ := newRunner(t, cloner)
 
-	err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
+	_, err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
 	if err == nil {
 		t.Fatal("expected error from clone failure, got nil")
 	}
@@ -102,7 +160,7 @@ func TestRun_zigzagError(t *testing.T) {
 		ReportsDir:   t.TempDir(),
 	}, zap.NewNop())
 
-	err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
+	_, err := r.Run(context.Background(), github.WebhookEvent{InstallationID: 1})
 	if err == nil {
 		t.Fatal("expected error from zigzag failure, got nil")
 	}
