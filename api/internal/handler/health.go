@@ -2,10 +2,10 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/LegationPro/zagforge-mvp-impl/shared/go/httputil"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,8 +24,7 @@ func NewHealthHandler(pool *pgxpool.Pool) *HealthHandler {
 
 // Liveness returns 200 if the process is running. No dependency checks.
 func (h *HealthHandler) Liveness(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
+	httputil.WriteJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
 // Readiness returns 200 only if the server can serve traffic (DB reachable).
@@ -34,11 +33,9 @@ func (h *HealthHandler) Readiness(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := h.pool.Ping(ctx); err != nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(HealthResponse{Status: "unavailable", Reason: new("db unreachable")})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, HealthResponse{Status: "unavailable", Reason: new("db unreachable")})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(HealthResponse{Status: "ready"})
+	httputil.WriteJSON(w, http.StatusOK, HealthResponse{Status: "ready"})
 }
