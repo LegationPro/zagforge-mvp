@@ -76,7 +76,20 @@ func run() error {
 	if err := internal.Create([]router.Subroute{
 		{Method: router.POST, Path: "/internal/webhooks/github", Handler: wh.ServeHTTP},
 	}); err != nil {
-		return fmt.Errorf("register routes: %w", err)
+		return fmt.Errorf("register internal routes: %w", err)
+	}
+
+	api := handler.NewAPIHandler(database, log)
+	v1 := r.Group()
+	if err := v1.Create([]router.Subroute{
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}", Handler: api.GetRepo},
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}/jobs", Handler: api.ListJobs},
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}/jobs/{jobID}", Handler: api.GetJob},
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}/snapshots", Handler: api.ListSnapshots},
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}/snapshots/latest", Handler: api.GetLatestSnapshot},
+		{Method: router.GET, Path: "/api/v1/snapshots/{snapshotID}", Handler: api.GetSnapshot},
+	}); err != nil {
+		return fmt.Errorf("register api routes: %w", err)
 	}
 
 	srv := &http.Server{
