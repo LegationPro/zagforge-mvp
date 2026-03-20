@@ -10,16 +10,10 @@ fi
 
 echo "Running pre-commit checks on Go files..."
 
-# Check gofmt
-UNFORMATTED=$(gofmt -l $STAGED_GO_FILES 2>&1 || true)
-if [ -n "$UNFORMATTED" ]; then
-    echo "❌ gofmt: the following files need formatting:"
-    echo "$UNFORMATTED"
-    echo ""
-    echo "Run: gofmt -w $UNFORMATTED"
-    exit 1
-fi
-echo "✅ gofmt"
+# Auto-format with gofmt and re-stage
+gofmt -w $STAGED_GO_FILES
+git add $STAGED_GO_FILES
+echo "✅ gofmt (auto-formatted)"
 
 # Run golangci-lint on changed packages
 PACKAGES=$(echo "$STAGED_GO_FILES" | xargs -I{} dirname {} | sort -u | sed 's|^|./|')
