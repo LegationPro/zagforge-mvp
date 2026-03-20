@@ -12,7 +12,7 @@ on:
 env:
   PROJECT_ID: zagforge
   REGION: us-central1
-  JOB: zagforge-worker
+  SERVICE: zagforge-worker
   REGISTRY: us-central1-docker.pkg.dev/zagforge/zagforge
 
 jobs:
