@@ -118,7 +118,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// Cache hit — stream immediately.
 	if cached, ok, _ := h.cache.Get(r.Context(), cacheKey); ok {
 		w.Header().Set("Content-Type", "text/markdown")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+
 		_, _ = io.WriteString(w, cached)
 		return
 	}

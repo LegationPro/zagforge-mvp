@@ -33,7 +33,7 @@ type snapshotMetadata struct {
 		Language string `json:"language"`
 		Lines    int    `json:"lines"`
 		SHA      string `json:"sha" validate:"required"`
-	} `json:"file_tree" validate:"required,dive"`
+	} `json:"file_tree" validate:"required,min=1,max=10000,dive"`
 }
 
 type uploadResponse struct {

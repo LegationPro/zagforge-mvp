@@ -30,6 +30,7 @@ import (
 	"github.com/LegationPro/zagforge/api/internal/handler/watchdog"
 	"github.com/LegationPro/zagforge/api/internal/handler/webhook"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
+	"github.com/LegationPro/zagforge/api/internal/middleware/bodylimit"
 	"github.com/LegationPro/zagforge/api/internal/middleware/clitoken"
 	"github.com/LegationPro/zagforge/api/internal/middleware/contenttype"
 	corsmw "github.com/LegationPro/zagforge/api/internal/middleware/cors"
@@ -159,7 +160,6 @@ func run() error {
 	queryH := queryhandler.NewHandler(database, ctxCache, ch, gcsClient, encSvc, log)
 
 	r := router.New()
-	r.Use(corsmw.Cors(c.CORS.AllowedOrigins))
 
 	// Health — no auth, no rate limit.
 	healthRoutes := r.Group()
@@ -179,8 +179,9 @@ func run() error {
 		return fmt.Errorf("register github auth routes: %w", err)
 	}
 
-	// Webhooks — Content-Type + rate limited by IP, higher burst (GitHub sends bursts).
+	// Webhooks — body limit + Content-Type + rate limited by IP, higher burst (GitHub sends bursts).
 	internal := r.Group()
+	internal.Use(bodylimit.Limit(1 << 20)) // 1MB max
 	internal.Use(contenttype.RequireJSON())
 	internal.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
 		MaxRequests: 120,
@@ -192,8 +193,9 @@ func run() error {
 		return fmt.Errorf("register internal routes: %w", err)
 	}
 
-	// Job callbacks — Content-Type + signed job token auth.
+	// Job callbacks — body limit + Content-Type + signed job token auth.
 	callbacks := r.Group()
+	callbacks.Use(bodylimit.Limit(1 << 20)) // 1MB max
 	callbacks.Use(contenttype.RequireJSON())
 	callbacks.Use(jobtokenmw.Auth(signer, log))
 	if err := callbacks.Create([]router.Subroute{
@@ -212,8 +214,9 @@ func run() error {
 		return fmt.Errorf("register watchdog routes: %w", err)
 	}
 
-	// API v1 — auth first (rejects unauthenticated), then rate limit by user ID.
+	// API v1 — restricted CORS + auth + rate limit.
 	v1 := r.Group()
+	v1.Use(corsmw.Cors(c.CORS.AllowedOrigins))
 	v1.Use(auth.Auth(log))
 	v1.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
 		MaxRequests: 60,
@@ -230,8 +233,9 @@ func run() error {
 		return fmt.Errorf("register api routes: %w", err)
 	}
 
-	// Context URL — public, no auth (token is the secret).
+	// Context URL — no auth (token is the secret), restricted CORS for dashboard.
 	contextRoutes := r.Group()
+	contextRoutes.Use(corsmw.Cors(c.CORS.AllowedOrigins))
 	if err := contextRoutes.Create([]router.Subroute{
 		{Method: router.HEAD, Path: "/v1/context/{token}", Handler: contextURLH.Head},
 		{Method: router.GET, Path: "/v1/context/{token}", Handler: contextURLH.Get},
@@ -239,10 +243,15 @@ func run() error {
 		return fmt.Errorf("register context url routes: %w", err)
 	}
 
-	// CLI upload — CLI token auth, no Clerk JWT.
+	// CLI upload — body limit + CLI token auth + rate limited.
 	uploadRoutes := r.Group()
+	uploadRoutes.Use(bodylimit.Limit(10 << 20)) // 10MB max
 	uploadRoutes.Use(contenttype.RequireJSON())
 	uploadRoutes.Use(clitoken.Auth(c.App.CLIAPIKey))
+	uploadRoutes.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
+		MaxRequests: 60,
+		Window:      1 * time.Minute,
+	}, "upload", log))
 	if err := uploadRoutes.Create([]router.Subroute{
 		{Method: router.POST, Path: "/api/v1/upload", Handler: uploadH.Upload},
 	}); err != nil {

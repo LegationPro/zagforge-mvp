@@ -6,17 +6,18 @@ import (
 	"github.com/go-chi/cors"
 )
 
+// Cors returns CORS middleware for dashboard-facing routes with restricted origins.
+// Allows GET, POST, PUT, DELETE, PATCH for authenticated mutation endpoints.
 func Cors(allowedOrigins []string) func(http.Handler) http.Handler {
-	// If there is no allowedOrigions, simply fallback to zagforge.com
 	if len(allowedOrigins) == 0 {
-		allowedOrigins = []string{"https://zagforge.com"}
+		allowedOrigins = []string{"https://cloud.zagforge.com"}
 	}
 
 	return cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           300,
 	})
 }
