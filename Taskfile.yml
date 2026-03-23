@@ -110,10 +110,12 @@ tasks:
             - "{{.DC}} logs -f api"
 
     test:integration:
-        desc: Run integration tests (requires running Postgres)
+        desc: Run integration tests (requires running Postgres + fake-gcs)
         cmds:
-            - "{{.DC}} up -d postgres"
+            - "{{.DC}} up -d postgres fake-gcs"
             - "{{.DC}} run --rm migrate"
             - go test -tags=integration -race -v ./api/internal/integration/...
         env:
             TEST_DATABASE_URL: postgres://zagforge:zagforge@localhost:5432/zagforge?sslmode=disable
+            TEST_GCS_ENDPOINT: http://localhost:4443/storage/v1/
+            TEST_GCS_BUCKET: zagforge-snapshots-test
