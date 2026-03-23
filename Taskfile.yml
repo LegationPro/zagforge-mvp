@@ -89,6 +89,11 @@ tasks:
         cmds:
             - "{{.DC}} run --rm --no-deps api sh -c 'cd /app && migrate create -ext sql -dir api/internal/db/migrations -seq {{.NAME}}'"
 
+    db:shell:
+        desc: Open a psql shell to the local dev database
+        cmds:
+            - "{{.DC}} exec postgres psql -U zagforge -d zagforge"
+
     db:seed:
         desc: Seed dev database with test org and repo
         cmds:
