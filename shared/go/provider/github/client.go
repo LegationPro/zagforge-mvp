@@ -150,6 +150,43 @@ func (h *ClientHandler) CloneRepo(ctx context.Context, repoURL, ref, token, dst 
 	return nil
 }
 
+// GetBlob fetches a Git blob by SHA and returns its decoded content as a string.
+// Uses the GitHub Git Blobs API: GET /repos/{owner}/{repo}/git/blobs/{sha}.
+func (h *ClientHandler) GetBlob(ctx context.Context, installationID int64, repoFullName, sha string) (string, error) {
+	token, err := h.GenerateCloneToken(ctx, installationID)
+	if err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/repos/%s/git/blobs/%s", h.client.apiBaseURL, repoFullName, sha)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github.raw+json")
+	req.Header.Set("X-GitHub-Api-Version", GithubApiVersion)
+
+	resp, err := h.client.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("get blob: %w", err)
+	}
+	defer h.closeBody(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read blob body: %w", err)
+	}
+
+	return string(body), nil
+}
+
 // ListRepos returns all repositories accessible to the given installation.
 // It paginates through the GitHub API until all repos are collected.
 func (h *ClientHandler) ListRepos(ctx context.Context, installationID int64) ([]Repo, error) {
