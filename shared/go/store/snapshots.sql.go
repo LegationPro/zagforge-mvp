@@ -108,6 +108,74 @@ func (q *Queries) GetSnapshotsByBranch(ctx context.Context, arg GetSnapshotsByBr
 	return items, nil
 }
 
+const insertCLISnapshot = `-- name: InsertCLISnapshot :one
+INSERT INTO snapshots (repo_id, branch, commit_sha, gcs_path,
+    snapshot_version, zigzag_version, size_bytes, metadata
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (repo_id, branch, commit_sha) DO UPDATE
+ SET gcs_path = EXCLUDED.gcs_path,
+     snapshot_version = EXCLUDED.snapshot_version,
+     zigzag_version = EXCLUDED.zigzag_version,
+     size_bytes = EXCLUDED.size_bytes,
+     metadata = EXCLUDED.metadata
+RETURNING id, repo_id, job_id, branch, commit_sha, gcs_path,
+    snapshot_version, zigzag_version, size_bytes, metadata,
+    created_at
+`
+
+type InsertCLISnapshotParams struct {
+	RepoID          pgtype.UUID
+	Branch          string
+	CommitSha       string
+	GcsPath         string
+	SnapshotVersion int32
+	ZigzagVersion   string
+	SizeBytes       int64
+	Metadata        []byte
+}
+
+type InsertCLISnapshotRow struct {
+	ID              pgtype.UUID
+	RepoID          pgtype.UUID
+	JobID           pgtype.UUID
+	Branch          string
+	CommitSha       string
+	GcsPath         string
+	SnapshotVersion int32
+	ZigzagVersion   string
+	SizeBytes       int64
+	Metadata        []byte
+	CreatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) InsertCLISnapshot(ctx context.Context, arg InsertCLISnapshotParams) (InsertCLISnapshotRow, error) {
+	row := q.db.QueryRow(ctx, insertCLISnapshot,
+		arg.RepoID,
+		arg.Branch,
+		arg.CommitSha,
+		arg.GcsPath,
+		arg.SnapshotVersion,
+		arg.ZigzagVersion,
+		arg.SizeBytes,
+		arg.Metadata,
+	)
+	var i InsertCLISnapshotRow
+	err := row.Scan(
+		&i.ID,
+		&i.RepoID,
+		&i.JobID,
+		&i.Branch,
+		&i.CommitSha,
+		&i.GcsPath,
+		&i.SnapshotVersion,
+		&i.ZigzagVersion,
+		&i.SizeBytes,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertSnapshot = `-- name: InsertSnapshot :one
 INSERT INTO snapshots (repo_id, job_id, branch, commit_sha, gcs_path, snapshot_version, zigzag_version, size_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
