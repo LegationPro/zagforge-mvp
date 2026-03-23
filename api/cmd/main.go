@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,26 +14,35 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/api/internal/cache/contextcache"
 	"github.com/LegationPro/zagforge/api/internal/config"
 	"github.com/LegationPro/zagforge/api/internal/db"
 	"github.com/LegationPro/zagforge/api/internal/engine"
+	aikeyshandler "github.com/LegationPro/zagforge/api/internal/handler/aikeys"
 	apihandler "github.com/LegationPro/zagforge/api/internal/handler/api"
 	"github.com/LegationPro/zagforge/api/internal/handler/callback"
+	contexttokenshandler "github.com/LegationPro/zagforge/api/internal/handler/contexttokens"
+	contexturlhandler "github.com/LegationPro/zagforge/api/internal/handler/contexturl"
 	"github.com/LegationPro/zagforge/api/internal/handler/githubauth"
 	"github.com/LegationPro/zagforge/api/internal/handler/health"
+	queryhandler "github.com/LegationPro/zagforge/api/internal/handler/query"
+	uploadhandler "github.com/LegationPro/zagforge/api/internal/handler/upload"
 	"github.com/LegationPro/zagforge/api/internal/handler/watchdog"
 	"github.com/LegationPro/zagforge/api/internal/handler/webhook"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
+	"github.com/LegationPro/zagforge/api/internal/middleware/clitoken"
 	"github.com/LegationPro/zagforge/api/internal/middleware/contenttype"
 	corsmw "github.com/LegationPro/zagforge/api/internal/middleware/cors"
 	jobtokenmw "github.com/LegationPro/zagforge/api/internal/middleware/jobtoken"
 	"github.com/LegationPro/zagforge/api/internal/middleware/ratelimit"
 	"github.com/LegationPro/zagforge/api/internal/middleware/watchdogauth"
 	"github.com/LegationPro/zagforge/api/internal/service"
+	"github.com/LegationPro/zagforge/api/internal/service/encryption"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 	"github.com/LegationPro/zagforge/shared/go/logger"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
 	"github.com/LegationPro/zagforge/shared/go/router"
+	storagepkg "github.com/LegationPro/zagforge/shared/go/storage"
 )
 
 func run() error {
@@ -112,6 +122,27 @@ func run() error {
 		log.Info("cloud tasks not configured, using noop enqueuer (poller mode)")
 	}
 
+	// GCS client for snapshot storage.
+	gcsClient, err := storagepkg.NewClient(context.Background(), storagepkg.Config{
+		Bucket:   c.GCS.Bucket,
+		Endpoint: c.GCS.Endpoint,
+	}, log)
+	if err != nil {
+		return fmt.Errorf("create gcs client: %w", err)
+	}
+
+	// Encryption service for AI provider keys.
+	encKeyBytes, err := base64.StdEncoding.DecodeString(c.App.EncryptionKeyBase64)
+	if err != nil {
+		return fmt.Errorf("decode encryption key: %w", err)
+	}
+	encSvc, err := encryption.New(encKeyBytes)
+	if err != nil {
+		return fmt.Errorf("init encryption: %w", err)
+	}
+
+	ctxCache := contextcache.NewRedis(rdb)
+
 	svc := service.NewJobService(database, log, enqueuer, signer)
 	wh := webhook.NewHandler(ch, svc, log)
 	healthH := health.NewHandler(pool)
@@ -119,6 +150,13 @@ func run() error {
 	callbackH := callback.NewHandler(database, ch, log)
 	watchdogH := watchdog.NewHandler(database, log)
 	githubAuthH := githubauth.NewHandler(database, c.App.GithubAppSlug, log)
+
+	// Phase 5 handlers.
+	uploadH := uploadhandler.NewHandler(database, gcsClient, log)
+	contextURLH := contexturlhandler.NewHandler(database, ctxCache, ch, gcsClient, log)
+	ctxTokensH := contexttokenshandler.NewHandler(database, log)
+	aiKeysH := aikeyshandler.NewHandler(database, encSvc, log)
+	queryH := queryhandler.NewHandler(database, ctxCache, ch, gcsClient, encSvc, log)
 
 	r := router.New()
 	r.Use(corsmw.Cors(c.CORS.AllowedOrigins))
@@ -190,6 +228,38 @@ func run() error {
 		{Method: router.GET, Path: "/api/v1/snapshots/{snapshotID}", Handler: apiH.GetSnapshot},
 	}); err != nil {
 		return fmt.Errorf("register api routes: %w", err)
+	}
+
+	// Context URL — public, no auth (token is the secret).
+	contextRoutes := r.Group()
+	if err := contextRoutes.Create([]router.Subroute{
+		{Method: router.HEAD, Path: "/v1/context/{token}", Handler: contextURLH.Head},
+		{Method: router.GET, Path: "/v1/context/{token}", Handler: contextURLH.Get},
+	}); err != nil {
+		return fmt.Errorf("register context url routes: %w", err)
+	}
+
+	// CLI upload — CLI token auth, no Clerk JWT.
+	uploadRoutes := r.Group()
+	uploadRoutes.Use(contenttype.RequireJSON())
+	uploadRoutes.Use(clitoken.Auth(c.App.CLIAPIKey))
+	if err := uploadRoutes.Create([]router.Subroute{
+		{Method: router.POST, Path: "/api/v1/upload", Handler: uploadH.Upload},
+	}); err != nil {
+		return fmt.Errorf("register upload routes: %w", err)
+	}
+
+	// Context tokens + AI keys + Query — Clerk auth + rate limited.
+	if err := v1.Create([]router.Subroute{
+		{Method: router.GET, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.List},
+		{Method: router.POST, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.Create},
+		{Method: router.DELETE, Path: "/api/v1/repos/{repoID}/context-tokens/{tokenID}", Handler: ctxTokensH.Delete},
+		{Method: router.GET, Path: "/api/v1/orgs/settings/ai-keys", Handler: aiKeysH.List},
+		{Method: router.PUT, Path: "/api/v1/orgs/settings/ai-keys", Handler: aiKeysH.Upsert},
+		{Method: router.DELETE, Path: "/api/v1/orgs/settings/ai-keys/{provider}", Handler: aiKeysH.Delete},
+		{Method: router.POST, Path: "/api/v1/repos/{repoID}/query", Handler: queryH.Query},
+	}); err != nil {
+		return fmt.Errorf("register phase 5 routes: %w", err)
 	}
 
 	srv := &http.Server{

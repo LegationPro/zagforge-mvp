@@ -2,8 +2,6 @@ package contexturl
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -41,11 +39,6 @@ type Handler struct {
 
 func NewHandler(db *dbpkg.DB, cache contextcache.Cache, gh githubprovider.Worker, gcs *storage.Client, log *zap.Logger) *Handler {
 	return &Handler{db: db, cache: cache, github: gh, storage: gcs, log: log}
-}
-
-func tokenHash(raw string) string {
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:])
 }
 
 // Head handles HEAD /v1/context/{token} — lightweight token validation, no GitHub fetch.
