@@ -22,6 +22,10 @@ type Fetcher interface {
 // FetcherFunc adapts a plain function to Fetcher.
 type FetcherFunc func(ctx context.Context, sha string) (string, error)
 
+func (f FetcherFunc) FetchBlob(ctx context.Context, sha string) (string, error) {
+	return f(ctx, sha)
+}
+
 // Assemble writes a report.llm.md-style markdown document to w.
 // Flushes the header immediately; file content is streamed as each blob arrives.
 func Assemble(ctx context.Context, repoFullName, commitSha string, files []FileEntry, fetcher Fetcher, w io.Writer) error {
