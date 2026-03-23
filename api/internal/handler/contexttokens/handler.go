@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
@@ -16,7 +17,7 @@ import (
 
 var (
 	errInternal      = errors.New("internal error")
-	errOrgNotFound   = errors.New("organization not found")
+	errRepoNotFound  = errors.New("repository not found")
 	errInvalidBody   = errors.New("invalid request body")
 	errInvalidExpiry = errors.New("expires_at must be a valid RFC3339 timestamp")
 )
@@ -38,13 +39,35 @@ func NewHandler(db *dbpkg.DB, log *zap.Logger) *Handler {
 	return &Handler{db: db, log: log}
 }
 
-// List returns context tokens for a repo (repoID from chi URL param).
+// verifyRepoOwnership checks that the repo exists and belongs to the requesting org.
+func (h *Handler) verifyRepoOwnership(r *http.Request, repoID pgtype.UUID) error {
+	repo, err := h.db.Queries.GetRepoByID(r.Context(), repoID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errRepoNotFound
+		}
+		return err
+	}
+	orgID := auth.OrgIDFromContext(r.Context())
+	if repo.OrgID != orgID {
+		return errRepoNotFound
+	}
+	return nil
+}
+
+// List returns context tokens for a repo.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	repoID, err := httputil.ParseUUID(r, "repoID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, err)
 		return
 	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
+		return
+	}
+
 	tokens, err := h.db.Queries.ListContextTokensByRepo(r.Context(), repoID)
 	if err != nil {
 		h.log.Error("list context tokens", zap.Error(err))
@@ -56,14 +79,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // Create generates a new context token and returns the raw token once only.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.ClaimsFromContext(r.Context())
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
+	orgID := auth.OrgIDFromContext(r.Context())
+
 	repoID, err := httputil.ParseUUID(r, "repoID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
 		return
 	}
 
@@ -84,17 +109,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := sha256Hash(raw)
 
-	clerkOrgID, err := auth.ResolveClerkOrgID(claims)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, err)
-		return
-	}
-	org, err := h.db.Queries.GetOrgByClerkID(r.Context(), clerkOrgID)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusNotFound, errOrgNotFound)
-		return
-	}
-
 	var expiresAt pgtype.Timestamptz
 	if body.ExpiresAt != nil {
 		t, perr := time.Parse(time.RFC3339, *body.ExpiresAt)
@@ -107,7 +121,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	tok, err := h.db.Queries.InsertContextToken(r.Context(), store.InsertContextTokenParams{
 		RepoID:    repoID,
-		OrgID:     org.ID,
+		OrgID:     orgID,
 		TokenHash: hash,
 		Label:     pgtype.Text{String: body.Label, Valid: body.Label != ""},
 		ExpiresAt: expiresAt,
@@ -134,28 +148,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Delete revokes a context token (must belong to caller's org).
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	claims, err := auth.ClaimsFromContext(r.Context())
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
+	orgID := auth.OrgIDFromContext(r.Context())
+
 	tokenID, err := httputil.ParseUUID(r, "tokenID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, err)
 		return
 	}
-	clerkOrgID, err := auth.ResolveClerkOrgID(claims)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, err)
-		return
-	}
-	org, err := h.db.Queries.GetOrgByClerkID(r.Context(), clerkOrgID)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusNotFound, errOrgNotFound)
-		return
-	}
+
 	if err := h.db.Queries.DeleteContextToken(r.Context(), store.DeleteContextTokenParams{
-		ID: tokenID, OrgID: org.ID,
+		ID: tokenID, OrgID: orgID,
 	}); err != nil {
 		h.log.Error("delete context token", zap.Error(err))
 		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)

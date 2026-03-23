@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/store"
 )
@@ -42,6 +43,18 @@ func (h *Handler) GetSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify the snapshot's repo belongs to the requesting org.
+	repo, err := h.db.Queries.GetRepoByID(r.Context(), snap.RepoID)
+	if err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrSnapshotNotFound)
+		return
+	}
+	orgID := auth.OrgIDFromContext(r.Context())
+	if repo.OrgID != orgID {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrSnapshotNotFound)
+		return
+	}
+
 	httputil.OkResponse(w, snap)
 }
 
@@ -49,6 +62,11 @@ func (h *Handler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 	repoID, err := httputil.ParseUUID(r, "repoID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, ErrInvalidRepoID)
+		return
+	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}
 
@@ -75,6 +93,11 @@ func (h *Handler) GetLatestSnapshot(w http.ResponseWriter, r *http.Request) {
 	repoID, err := httputil.ParseUUID(r, "repoID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, ErrInvalidRepoID)
+		return
+	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}
 

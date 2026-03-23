@@ -154,7 +154,6 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/markdown")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	var assembled strings.Builder
 	mw := io.MultiWriter(w, &assembled)

@@ -80,19 +80,9 @@ func TestQuery_InvalidSnapshotID(t *testing.T) {
 	}
 }
 
-func TestQuery_ValidPayloadNoAuth(t *testing.T) {
-	h := query.NewHandler(nil, nil, nil, nil, nil, zap.NewNop())
-	body, _ := json.Marshal(map[string]string{"question": "what does main do?"})
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	h.Query(w, req)
-
-	// Passes validation but fails at auth (no claims in context)
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("got %d, want 401", w.Code)
-	}
-}
+// Note: auth is enforced by OrgScope middleware (not the handler).
+// A valid payload with no auth context would never reach Query() in production.
+// Cross-org access is tested via integration tests.
 
 func TestConfig_SystemPromptNotEmpty(t *testing.T) {
 	if query.SystemPrompt == "" {

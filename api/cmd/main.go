@@ -214,10 +214,11 @@ func run() error {
 		return fmt.Errorf("register watchdog routes: %w", err)
 	}
 
-	// API v1 — restricted CORS + auth + rate limit.
+	// API v1 — restricted CORS + auth + org scoping + rate limit.
 	v1 := r.Group()
 	v1.Use(corsmw.Cors(c.CORS.AllowedOrigins))
 	v1.Use(auth.Auth(log))
+	v1.Use(auth.OrgScope(database.Queries, log))
 	v1.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
 		MaxRequests: 60,
 		Window:      1 * time.Minute,

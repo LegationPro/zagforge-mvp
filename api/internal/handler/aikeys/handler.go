@@ -33,12 +33,9 @@ func NewHandler(db *dbpkg.DB, enc *encryption.Service, log *zap.Logger) *Handler
 
 // List returns provider names and key hints — never the raw key.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	org, err := h.resolveOrg(r)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
-	keys, err := h.db.Queries.ListAIProviderKeys(r.Context(), org.ID)
+	orgID := auth.OrgIDFromContext(r.Context())
+
+	keys, err := h.db.Queries.ListAIProviderKeys(r.Context(), orgID)
 	if err != nil {
 		h.log.Error("list ai keys", zap.Error(err))
 		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
@@ -49,6 +46,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // Upsert stores an encrypted AI provider key.
 func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
+	orgID := auth.OrgIDFromContext(r.Context())
+
 	body, err := httputil.DecodeJSON[struct {
 		Provider string `json:"provider"`
 		RawKey   string `json:"raw_key"`
@@ -75,14 +74,8 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 
 	hint := "..." + body.RawKey[len(body.RawKey)-4:]
 
-	org, err := h.resolveOrg(r)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
-
 	if _, err := h.db.Queries.UpsertAIProviderKey(r.Context(), store.UpsertAIProviderKeyParams{
-		OrgID:     org.ID,
+		OrgID:     orgID,
 		Provider:  body.Provider,
 		KeyCipher: cipher,
 		KeyHint:   hint,
@@ -96,30 +89,15 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 
 // Delete removes an AI provider key.
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	orgID := auth.OrgIDFromContext(r.Context())
 	provider := chi.URLParam(r, "provider")
-	org, err := h.resolveOrg(r)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
+
 	if err := h.db.Queries.DeleteAIProviderKey(r.Context(), store.DeleteAIProviderKeyParams{
-		OrgID: org.ID, Provider: provider,
+		OrgID: orgID, Provider: provider,
 	}); err != nil {
 		h.log.Error("delete ai key", zap.Error(err))
 		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handler) resolveOrg(r *http.Request) (store.Organization, error) {
-	claims, err := auth.ClaimsFromContext(r.Context())
-	if err != nil {
-		return store.Organization{}, err
-	}
-	clerkOrgID, err := auth.ResolveClerkOrgID(claims)
-	if err != nil {
-		return store.Organization{}, err
-	}
-	return h.db.Queries.GetOrgByClerkID(r.Context(), clerkOrgID)
 }

@@ -13,13 +13,24 @@ import (
 )
 
 func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseUUID(r, "jobID")
+	repoID, err := httputil.ParseUUID(r, "repoID")
+	if err != nil {
+		httputil.ErrResponse(w, http.StatusBadRequest, ErrInvalidRepoID)
+		return
+	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
+		return
+	}
+
+	jobID, err := httputil.ParseUUID(r, "jobID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, ErrInvalidJobID)
 		return
 	}
 
-	job, err := h.db.Queries.GetJobByID(r.Context(), id)
+	job, err := h.db.Queries.GetJobByID(r.Context(), jobID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		httputil.ErrResponse(w, http.StatusNotFound, ErrJobNotFound)
 		return
@@ -30,6 +41,12 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verify the job belongs to the requested repo.
+	if job.RepoID != repoID {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrJobNotFound)
+		return
+	}
+
 	httputil.OkResponse(w, job)
 }
 
@@ -37,6 +54,11 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	repoID, err := httputil.ParseUUID(r, "repoID")
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, ErrInvalidRepoID)
+		return
+	}
+
+	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}
 

@@ -93,22 +93,8 @@ func TestUpsert_KeyTooShort(t *testing.T) {
 	}
 }
 
-func TestUpsert_ValidPayloadFailsAtAuth(t *testing.T) {
-	h := newTestHandler(t)
-	body, _ := json.Marshal(map[string]string{
-		"provider": "anthropic",
-		"raw_key":  "sk-ant-api01-supersecretkey",
-	})
-	req := httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	h.Upsert(w, req)
-
-	// Passes validation, encryption succeeds, but resolveOrg fails (no claims in context)
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("got %d, want 401 (no auth claims)", w.Code)
-	}
-}
+// Note: auth is enforced by OrgScope middleware, not the handler.
+// Cross-org access is tested via integration tests.
 
 func TestHintGeneration(t *testing.T) {
 	tests := []struct {
@@ -128,29 +114,5 @@ func TestHintGeneration(t *testing.T) {
 				t.Errorf("hint = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestList_NoAuth(t *testing.T) {
-	h := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	w := httptest.NewRecorder()
-
-	h.List(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("got %d, want 401", w.Code)
-	}
-}
-
-func TestDelete_NoAuth(t *testing.T) {
-	h := newTestHandler(t)
-	req := httptest.NewRequest(http.MethodDelete, "/", nil)
-	w := httptest.NewRecorder()
-
-	h.Delete(w, req)
-
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("got %d, want 401", w.Code)
 	}
 }

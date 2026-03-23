@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 )
 
@@ -25,6 +26,12 @@ func (h *Handler) GetRepo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("get repo", zap.Error(err))
 		httputil.ErrResponse(w, http.StatusInternalServerError, ErrInternal)
+		return
+	}
+
+	orgID := auth.OrgIDFromContext(r.Context())
+	if repo.OrgID != orgID {
+		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}
 

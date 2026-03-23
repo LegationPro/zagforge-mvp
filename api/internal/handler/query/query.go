@@ -49,23 +49,9 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claims, err := auth.ClaimsFromContext(r.Context())
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusUnauthorized, err)
-		return
-	}
-	clerkOrgID, err := auth.ResolveClerkOrgID(claims)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, err)
-		return
-	}
-	org, err := h.db.Queries.GetOrgByClerkID(r.Context(), clerkOrgID)
-	if err != nil {
-		httputil.ErrResponse(w, http.StatusNotFound, errOrgNotFound)
-		return
-	}
+	orgID := auth.OrgIDFromContext(r.Context())
 
-	provider, rawKey, err := h.selectProvider(r.Context(), org.ID)
+	provider, rawKey, err := h.selectProvider(r.Context(), orgID)
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusUnprocessableEntity, errNoAIKey)
 		return
@@ -78,6 +64,10 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 	}
 	repo, err := h.db.Queries.GetRepoByID(r.Context(), repoID)
 	if err != nil {
+		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
+		return
+	}
+	if repo.OrgID != orgID {
 		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
 		return
 	}
