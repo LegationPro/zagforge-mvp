@@ -42,6 +42,23 @@ tasks:
             - task: sync-secrets
               vars: { SERVICE: worker }
 
+    ship:
+        desc: "Trigger GitHub Actions deploy. Usage: task deploy:ship SERVICE=api [ENV=dev]"
+        requires:
+            vars: [SERVICE]
+        cmds:
+            - echo "Triggering deploy for {{.SERVICE}} to {{.ENV}}..."
+            - gh workflow run deploy-{{.SERVICE}}.yml -f environment={{.ENV}}
+            - echo "Deploy triggered. Watch at https://github.com/LegationPro/zagforge-mvp/actions"
+
+    ship:all:
+        desc: "Deploy both API and Worker. Usage: task deploy:ship:all [ENV=dev]"
+        cmds:
+            - task: ship
+              vars: { SERVICE: api }
+            - task: ship
+              vars: { SERVICE: worker }
+
     image-push:
         desc: "Build and push a service image. Usage: task deploy:image-push SERVICE=api [ENV=prod]"
         requires:
