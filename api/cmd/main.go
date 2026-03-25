@@ -90,9 +90,6 @@ func run() error {
 		return fmt.Errorf("create client handler: %w", err)
 	}
 
-	// NOTE: Clerk SDK removed. Zitadel OIDC JWT verification will be added in Phase 3.
-	// The auth middleware still uses Clerk types until then.
-
 	signer := jobtoken.NewSigner([]byte(c.App.HMACSigningKey), 30*time.Minute)
 	if c.App.HMACSigningKeyPrev != "" {
 		signer = signer.WithPreviousKey([]byte(c.App.HMACSigningKeyPrev))
@@ -218,11 +215,19 @@ func run() error {
 		return fmt.Errorf("register watchdog routes: %w", err)
 	}
 
-	// API v1 — restricted CORS + auth + org scoping + rate limit.
+	// API v1 — restricted CORS + auth + scope resolution + rate limit.
+	authMiddleware, err := auth.Auth(auth.JWKSConfig{
+		IssuerURL: c.App.ZitadelIssuerURL,
+		ProjectID: c.App.ZitadelProjectID,
+	}, log)
+	if err != nil {
+		return fmt.Errorf("init auth middleware: %w", err)
+	}
+
 	v1 := r.Group()
 	v1.Use(corsmw.Cors(c.CORS.AllowedOrigins))
-	v1.Use(auth.Auth(log))
-	v1.Use(auth.OrgScope(database.Queries, log))
+	v1.Use(authMiddleware)
+	v1.Use(auth.Scope(database.Queries, log))
 	v1.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
 		MaxRequests: 60,
 		Window:      1 * time.Minute,
@@ -263,7 +268,7 @@ func run() error {
 		return fmt.Errorf("register upload routes: %w", err)
 	}
 
-	// Context tokens + AI keys + Query — Clerk auth + rate limited.
+	// Context tokens + AI keys + Query — Zitadel auth + rate limited.
 	if err := v1.Create([]router.Subroute{
 		{Method: router.GET, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.List},
 		{Method: router.POST, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.Create},
