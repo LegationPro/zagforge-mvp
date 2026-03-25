@@ -23,12 +23,12 @@ SELECT * FROM users WHERE email = $1;
 
 -- name: UpdateUser :one
 UPDATE users
-SET username       = COALESCE(NULLIF($2, ''), username),
-    email          = COALESCE(NULLIF($3, ''), email),
-    email_verified = $4,
-    phone          = $5,
-    avatar_url     = $6
-WHERE id = $1
+SET username       = COALESCE(NULLIF(sqlc.arg(username)::text, ''), username),
+    email          = COALESCE(NULLIF(sqlc.arg(email)::text, ''), email),
+    email_verified = sqlc.arg(email_verified),
+    phone          = sqlc.arg(phone),
+    avatar_url     = sqlc.arg(avatar_url)
+WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: DeleteUser :exec

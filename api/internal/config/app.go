@@ -1,15 +1,17 @@
 package config
 
 type AppConfig struct {
-	GithubAppID            int64  `env:"GITHUB_APP_ID,required"`
-	GithubAppSlug          string `env:"GITHUB_APP_SLUG,required"`
-	GithubAppPrivateKey    string `env:"GITHUB_APP_PRIVATE_KEY,required"`
-	GithubAppWebhookSecret string `env:"GITHUB_APP_WEBHOOK_SECRET,required"`
-	ZitadelIssuerURL       string `env:"ZITADEL_ISSUER_URL,required"`
-	ZitadelProjectID       string `env:"ZITADEL_PROJECT_ID,required"`
-	HMACSigningKey         string `env:"HMAC_SIGNING_KEY,required"`
-	HMACSigningKeyPrev     string `env:"HMAC_SIGNING_KEY_PREV"` // previous key for rotation grace period
-	WatchdogSecret         string `env:"WATCHDOG_SECRET,required"`
-	EncryptionKeyBase64    string `env:"ENCRYPTION_KEY_BASE64,required"`
-	CLIAPIKey              string `env:"CLI_API_KEY,required"`
+	GithubAppID             int64  `env:"GITHUB_APP_ID,required"`
+	GithubAppSlug           string `env:"GITHUB_APP_SLUG,required"`
+	GithubAppPrivateKey     string `env:"GITHUB_APP_PRIVATE_KEY,required"`
+	GithubAppWebhookSecret  string `env:"GITHUB_APP_WEBHOOK_SECRET,required"`
+	ZitadelIssuerURL        string `env:"ZITADEL_ISSUER_URL,required"`
+	ZitadelProjectID        string `env:"ZITADEL_PROJECT_ID,required"`
+	ZitadelServiceUserToken string `env:"ZITADEL_SERVICE_USER_TOKEN,required"`
+	ZitadelWebhookSecret    string `env:"ZITADEL_WEBHOOK_SECRET,required"`
+	HMACSigningKey          string `env:"HMAC_SIGNING_KEY,required"`
+	HMACSigningKeyPrev      string `env:"HMAC_SIGNING_KEY_PREV"` // previous key for rotation grace period
+	WatchdogSecret          string `env:"WATCHDOG_SECRET,required"`
+	EncryptionKeyBase64     string `env:"ENCRYPTION_KEY_BASE64,required"`
+	CLIAPIKey               string `env:"CLI_API_KEY,required"`
 }

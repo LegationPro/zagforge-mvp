@@ -17,6 +17,7 @@ import (
 	"github.com/LegationPro/zagforge/api/internal/config"
 	"github.com/LegationPro/zagforge/api/internal/db"
 	"github.com/LegationPro/zagforge/api/internal/engine"
+	accounthandler "github.com/LegationPro/zagforge/api/internal/handler/account"
 	aikeyshandler "github.com/LegationPro/zagforge/api/internal/handler/aikeys"
 	apihandler "github.com/LegationPro/zagforge/api/internal/handler/api"
 	"github.com/LegationPro/zagforge/api/internal/handler/callback"
@@ -24,10 +25,12 @@ import (
 	contexturlhandler "github.com/LegationPro/zagforge/api/internal/handler/contexturl"
 	"github.com/LegationPro/zagforge/api/internal/handler/githubauth"
 	"github.com/LegationPro/zagforge/api/internal/handler/health"
+	orghandler "github.com/LegationPro/zagforge/api/internal/handler/org"
 	queryhandler "github.com/LegationPro/zagforge/api/internal/handler/query"
 	uploadhandler "github.com/LegationPro/zagforge/api/internal/handler/upload"
 	"github.com/LegationPro/zagforge/api/internal/handler/watchdog"
 	"github.com/LegationPro/zagforge/api/internal/handler/webhook"
+	zitadelwh "github.com/LegationPro/zagforge/api/internal/handler/zitadelwebhook"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/api/internal/middleware/bodylimit"
 	"github.com/LegationPro/zagforge/api/internal/middleware/clitoken"
@@ -38,6 +41,7 @@ import (
 	"github.com/LegationPro/zagforge/api/internal/middleware/watchdogauth"
 	"github.com/LegationPro/zagforge/api/internal/service"
 	"github.com/LegationPro/zagforge/api/internal/service/encryption"
+	"github.com/LegationPro/zagforge/api/internal/zitadel"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 	"github.com/LegationPro/zagforge/shared/go/logger"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
@@ -156,6 +160,12 @@ func run() error {
 	aiKeysH := aikeyshandler.NewHandler(database, encSvc, log)
 	queryH := queryhandler.NewHandler(database, ctxCache, ch, gcsClient, encSvc, log)
 
+	// Auth migration handlers.
+	zitadelClient := zitadel.NewClient(c.App.ZitadelIssuerURL, c.App.ZitadelServiceUserToken)
+	accountH := accounthandler.NewHandler(database, zitadelClient, log)
+	orgH := orghandler.NewHandler(database, log)
+	zitadelWhH := zitadelwh.NewHandler(database, c.App.ZitadelWebhookSecret, log)
+
 	r := router.New()
 
 	// Health — no auth, no rate limit.
@@ -190,6 +200,7 @@ func run() error {
 	}, "webhook", log))
 	if err := internal.Create([]router.Subroute{
 		{Method: router.POST, Path: "/internal/webhooks/github", Handler: wh.ServeHTTP},
+		{Method: router.POST, Path: "/internal/webhooks/zitadel", Handler: zitadelWhH.ServeHTTP},
 	}); err != nil {
 		return fmt.Errorf("register internal routes: %w", err)
 	}
@@ -279,6 +290,32 @@ func run() error {
 		{Method: router.POST, Path: "/api/v1/repos/{repoID}/query", Handler: queryH.Query},
 	}); err != nil {
 		return fmt.Errorf("register phase 5 routes: %w", err)
+	}
+
+	// Account management — Zitadel auth + rate limited.
+	if err := v1.Create([]router.Subroute{
+		{Method: router.GET, Path: "/api/v1/account", Handler: accountH.GetProfile},
+		{Method: router.PATCH, Path: "/api/v1/account", Handler: accountH.UpdateProfile},
+		{Method: router.DELETE, Path: "/api/v1/account", Handler: accountH.DeleteAccount},
+		{Method: router.GET, Path: "/api/v1/account/sessions", Handler: accountH.ListSessions},
+		{Method: router.DELETE, Path: "/api/v1/account/sessions/{id}", Handler: accountH.RevokeSession},
+	}); err != nil {
+		return fmt.Errorf("register account routes: %w", err)
+	}
+
+	// Organization management — Zitadel auth + rate limited.
+	if err := v1.Create([]router.Subroute{
+		{Method: router.POST, Path: "/api/v1/orgs", Handler: orgH.CreateOrg},
+		{Method: router.GET, Path: "/api/v1/orgs", Handler: orgH.ListOrgs},
+		{Method: router.PATCH, Path: "/api/v1/orgs/{orgID}", Handler: orgH.UpdateOrg},
+		{Method: router.DELETE, Path: "/api/v1/orgs/{orgID}", Handler: orgH.DeleteOrg},
+		{Method: router.GET, Path: "/api/v1/orgs/{orgID}/members", Handler: orgH.ListMembers},
+		{Method: router.POST, Path: "/api/v1/orgs/{orgID}/members", Handler: orgH.InviteMember},
+		{Method: router.PATCH, Path: "/api/v1/orgs/{orgID}/members/{userID}", Handler: orgH.UpdateMemberRole},
+		{Method: router.DELETE, Path: "/api/v1/orgs/{orgID}/members/{userID}", Handler: orgH.RemoveMember},
+		{Method: router.GET, Path: "/api/v1/orgs/{orgID}/audit-log", Handler: orgH.ListAuditLog},
+	}); err != nil {
+		return fmt.Errorf("register org routes: %w", err)
 	}
 
 	srv := &http.Server{

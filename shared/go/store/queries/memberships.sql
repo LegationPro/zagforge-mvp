@@ -30,3 +30,6 @@ DELETE FROM memberships WHERE user_id = $1 AND org_id = $2;
 
 -- name: CountMembershipsByOrg :one
 SELECT count(*) FROM memberships WHERE org_id = $1;
+
+-- name: CountOwnersByOrg :one
+SELECT count(*) FROM memberships WHERE org_id = $1 AND role = 'owner';

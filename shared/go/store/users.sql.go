@@ -106,32 +106,32 @@ func (q *Queries) GetUserByZitadelID(ctx context.Context, zitadelUserID string) 
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET username       = COALESCE(NULLIF($2, ''), username),
-    email          = COALESCE(NULLIF($3, ''), email),
-    email_verified = $4,
-    phone          = $5,
-    avatar_url     = $6
-WHERE id = $1
+SET username       = COALESCE(NULLIF($1::text, ''), username),
+    email          = COALESCE(NULLIF($2::text, ''), email),
+    email_verified = $3,
+    phone          = $4,
+    avatar_url     = $5
+WHERE id = $6
 RETURNING id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	ID            pgtype.UUID
-	Column2       interface{}
-	Column3       interface{}
+	Username      string
+	Email         string
 	EmailVerified bool
 	Phone         pgtype.Text
 	AvatarUrl     pgtype.Text
+	ID            pgtype.UUID
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, updateUser,
-		arg.ID,
-		arg.Column2,
-		arg.Column3,
+		arg.Username,
+		arg.Email,
 		arg.EmailVerified,
 		arg.Phone,
 		arg.AvatarUrl,
+		arg.ID,
 	)
 	var i User
 	err := row.Scan(

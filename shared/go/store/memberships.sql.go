@@ -22,6 +22,17 @@ func (q *Queries) CountMembershipsByOrg(ctx context.Context, orgID pgtype.UUID) 
 	return count, err
 }
 
+const countOwnersByOrg = `-- name: CountOwnersByOrg :one
+SELECT count(*) FROM memberships WHERE org_id = $1 AND role = 'owner'
+`
+
+func (q *Queries) CountOwnersByOrg(ctx context.Context, orgID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOwnersByOrg, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMembership = `-- name: CreateMembership :one
 INSERT INTO memberships (user_id, org_id, role, invited_by)
 VALUES ($1, $2, $3, $4)
