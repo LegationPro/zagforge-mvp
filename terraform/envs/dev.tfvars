@@ -11,3 +11,8 @@ github_app_id        = "3122231"
 github_app_slug      = "zagforge-zigzag-dev"
 api_url              = "https://zagforge-api-89960017575.us-central1.run.app"
 cors_allowed_origins = "http://localhost:3000"
+
+# Zitadel
+zitadel_domain        = "zagforge-zitadel-89960017575.us-central1.run.app" # Cloud Run default domain for dev
+zitadel_min_instances = 0
+zitadel_max_instances = 1

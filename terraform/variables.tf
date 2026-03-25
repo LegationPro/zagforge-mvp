@@ -102,5 +102,30 @@ variable "domain" {
   default     = ""
 }
 
+# Zitadel
+variable "zitadel_domain" {
+  description = "Public domain for Zitadel (e.g. auth.zagforge.com)"
+  type        = string
+  default     = ""
+}
+
+variable "zitadel_image" {
+  description = "Zitadel container image with tag"
+  type        = string
+  default     = "ghcr.io/zitadel/zitadel:v2.71.6"
+}
+
+variable "zitadel_min_instances" {
+  description = "Minimum Zitadel Cloud Run instances (1 in prod — no cold starts on auth)"
+  type        = number
+  default     = 0
+}
+
+variable "zitadel_max_instances" {
+  description = "Maximum Zitadel Cloud Run instances"
+  type        = number
+  default     = 3
+}
+
 # Secrets are managed by Doppler — no Terraform variables needed.
 # Injected at deploy time via: doppler run -- gcloud run services update ...

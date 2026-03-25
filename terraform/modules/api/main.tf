@@ -73,8 +73,8 @@ resource "google_cloud_run_v2_service" "api" {
       # --- Secrets (managed by Doppler, injected at deploy time) ---
       # The following env vars are set via `doppler run -- gcloud run services update`:
       #   DATABASE_URL, REDIS_URL, GITHUB_APP_PRIVATE_KEY,
-      #   GITHUB_APP_WEBHOOK_SECRET, HMAC_SIGNING_KEY, CLERK_SECRET_KEY,
-      #   WATCHDOG_SECRET, ENCRYPTION_KEY_BASE64, CLI_API_KEY
+      #   GITHUB_APP_WEBHOOK_SECRET, HMAC_SIGNING_KEY, ZITADEL_ISSUER_URL,
+      #   ZITADEL_PROJECT_ID, WATCHDOG_SECRET, ENCRYPTION_KEY_BASE64, CLI_API_KEY
 
       resources {
         limits = {

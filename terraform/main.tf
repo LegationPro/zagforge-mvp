@@ -74,6 +74,19 @@ module "queue" {
   name_prefix = local.name_prefix
 }
 
+# --- Zitadel (Cloud Run Service — Identity Provider) ---
+module "zitadel" {
+  source = "./modules/zitadel"
+
+  project_id      = var.project_id
+  region          = var.region
+  name_prefix     = local.name_prefix
+  external_domain = var.zitadel_domain
+  zitadel_image   = var.zitadel_image
+  min_instances   = var.zitadel_min_instances
+  max_instances   = var.zitadel_max_instances
+}
+
 # --- API (Cloud Run Service) ---
 module "api" {
   source = "./modules/api"

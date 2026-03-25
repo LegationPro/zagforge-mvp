@@ -13,3 +13,8 @@ github_app_id        = "3122231"
 github_app_slug      = "zagforge-zigzag-dev"
 cors_allowed_origins = "https://zagforge.com"
 domain               = "api.zagforge.com"
+
+# Zitadel
+zitadel_domain        = "auth.zagforge.com"
+zitadel_min_instances = 1 # No cold starts on auth
+zitadel_max_instances = 5

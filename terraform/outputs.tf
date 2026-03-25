@@ -1,3 +1,13 @@
+output "zitadel_url" {
+  description = "Zitadel Cloud Run service URL"
+  value       = module.zitadel.url
+}
+
+output "zitadel_service_account" {
+  description = "Zitadel service account email"
+  value       = module.zitadel.service_account_email
+}
+
 output "api_url" {
   description = "Cloud Run API service URL"
   value       = module.api.url
