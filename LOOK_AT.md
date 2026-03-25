@@ -14,7 +14,7 @@ Everything below is already built and working on the `dev` branch (30+ commits a
 - Worker: poller, executor, handler, API client callbacks
 - Cloud Tasks integration with dual-key rotation
 - GCS storage for snapshots
-- Clerk auth middleware, job token middleware (HMAC signed)
+- Zitadel OIDC auth middleware (JWKS), job token middleware (HMAC signed)
 - Rate limiting middleware (Redis)
 - Watchdog endpoint (timeout stale jobs)
 - API handlers: repos, jobs, snapshots
@@ -87,7 +87,11 @@ Secrets to provision:
 | HMAC signing key (job tokens) | Quarterly, dual-version |
 | Redis auth password | With instance recreation |
 | DATABASE_URL | Per-environment |
-| CLERK_SECRET_KEY | Manual |
+| ZITADEL_ISSUER_URL | Per-environment |
+| ZITADEL_PROJECT_ID | After Zitadel setup |
+| ZITADEL_SERVICE_USER_TOKEN | After Zitadel setup |
+| ZITADEL_WEBHOOK_SECRET | After Zitadel setup |
+| ZITADEL_MASTERKEY | Per-environment |
 
 ---
 
@@ -215,7 +219,7 @@ The CI spec includes a `test-integration` job that spins up docker-compose, wait
 | [phase4/10-cicd.md](architecture/phase4/10-cicd.md) | 4 | CI + deploy GitHub Actions workflows |
 | [phase4/14-deployment-ops.md](architecture/phase4/14-deployment-ops.md) | 4 | Makefile ops, rollback playbook, canary, staging-to-prod |
 | [phase5/15-context-proxy.md](architecture/phase5/15-context-proxy.md) | 5 | Context URL, streaming assembly pipeline, Query Console, token lifecycle |
-| [phase5/16-dashboard.md](architecture/phase5/16-dashboard.md) | 5 | Next.js `apps/cloud` — routes, auth (Clerk headless), SSR strategy, UX decisions |
+| [phase5/16-dashboard.md](architecture/phase5/16-dashboard.md) | 5 | Next.js `apps/cloud` — routes, auth (Zitadel OIDC), SSR strategy, UX decisions |
 | [phase5/17-cli-upload.md](architecture/phase5/17-cli-upload.md) | 5 | `zigzag --upload` flag, CLI token auth, upload endpoint logic, open source placement |
 
 https://www.youtube.com/watch?v=fsuHLafTYyg

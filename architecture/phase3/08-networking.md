@@ -6,7 +6,7 @@ A global external Application Load Balancer routes traffic to Cloud Run services
 
 | Path prefix | Backend service | Notes |
 |---|---|---|
-| `/api/v1/*` | `api` Cloud Run service | Public, Clerk API key auth |
+| `/api/v1/*` | `api` Cloud Run service | Public, Zitadel OIDC JWT auth |
 | `/auth/*` | `api` Cloud Run service | GitHub App OAuth flows |
 | `/internal/webhooks/*` | `api` Cloud Run service | GitHub webhook receiver |
 | `/internal/jobs/*` | `api` Cloud Run service | Worker callbacks (signed token auth) |
@@ -101,7 +101,7 @@ type RateLimiter interface {
 func RateLimitMiddleware(limiter RateLimiter, limits RateLimitConfig) func(http.Handler) http.Handler
 ```
 
-Runs before the Clerk auth middleware so that rate-limited requests don't consume auth processing. The middleware extracts the API key from the `Authorization` header, determines the endpoint group from the route, and checks the limiter.
+Runs before the auth middleware so that rate-limited requests don't consume auth processing. The middleware extracts the identifier from the `Authorization` header (or falls back to client IP), determines the endpoint group from the route, and checks the limiter.
 
 **Response headers on all API responses:**
 

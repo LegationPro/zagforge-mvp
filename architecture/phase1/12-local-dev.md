@@ -41,7 +41,10 @@ Project: zagforge
 | `GITHUB_APP_PRIVATE_KEY` | GitHub App RSA private key (multiline) |
 | `GITHUB_APP_WEBHOOK_SECRET` | GitHub webhook HMAC secret |
 | `HMAC_SIGNING_KEY` | Job token signing key (≥32 bytes) |
-| `CLERK_SECRET_KEY` | Clerk API secret key |
+| `ZITADEL_ISSUER_URL` | Zitadel OIDC issuer URL |
+| `ZITADEL_PROJECT_ID` | Zitadel project ID (audience) |
+| `ZITADEL_SERVICE_USER_TOKEN` | Zitadel service user PAT |
+| `ZITADEL_WEBHOOK_SECRET` | Zitadel webhook HMAC secret |
 
 **Non-secret config (set directly in docker-compose, not Doppler):**
 
@@ -74,7 +77,10 @@ GITHUB_APP_ID=000000
 GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
 GITHUB_APP_WEBHOOK_SECRET=whsec_placeholder
 HMAC_SIGNING_KEY=placeholder-at-least-32-bytes-long!!
-CLERK_SECRET_KEY=sk_test_placeholder
+ZITADEL_ISSUER_URL=https://auth.zagforge.com
+ZITADEL_PROJECT_ID=placeholder
+ZITADEL_SERVICE_USER_TOKEN=pat_placeholder
+ZITADEL_WEBHOOK_SECRET=whsec_placeholder
 
 # --- Non-secrets (set in docker-compose.dev.yaml) ---
 # DATABASE_URL=postgres://zagforge:zagforge@postgres:5432/zagforge?sslmode=disable
@@ -118,7 +124,10 @@ services:
       - GITHUB_APP_PRIVATE_KEY
       - GITHUB_APP_ID
       - HMAC_SIGNING_KEY
-      - CLERK_SECRET_KEY
+      - ZITADEL_ISSUER_URL
+      - ZITADEL_PROJECT_ID
+      - ZITADEL_SERVICE_USER_TOKEN
+      - ZITADEL_WEBHOOK_SECRET
     volumes:
       - ./shared:/app/shared
       - ./api:/app/api

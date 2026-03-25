@@ -80,17 +80,17 @@
 ## Migration Phases
 
 ```
-Phase 1  Terraform: Zitadel on Cloud Run + config           ← infra, no code changes
-Phase 2  DB migration: users, memberships, sessions,        ← additive, non-breaking
+Phase 1  Terraform: Zitadel on Cloud Run + config           ✅ DONE
+Phase 2  DB migration: users, memberships, sessions,        ✅ DONE
          audit_log; add zitadel_org_id; dual ownership
-Phase 3  Auth middleware swap (3 files)                      ← the cutover
-Phase 4  Zitadel config: project, apps, SSO providers
-Phase 5  User flows: registration, SSO, username prompt
-Phase 6  Email: SMTP config in Zitadel + custom welcome
-Phase 7  Session dashboard: list/revoke active sessions
-Phase 8  Account management: profile, password, delete
-Phase 9  Organizations: create, invite, roles, audit log
-Phase 10 Cleanup: remove Clerk SDK, secrets, old columns
+Phase 3  Auth middleware swap (JWKS + scope)                 ✅ DONE
+Phase 4  Zitadel config: project, apps, SSO providers       ⏳ BLOCKED (needs running instance)
+Phase 5  User flows: registration, SSO, username prompt     ⏳ BLOCKED (needs Phase 4)
+Phase 6  Email: SMTP config in Zitadel + custom welcome     ⏳ BLOCKED (needs Phase 4)
+Phase 7  Session dashboard: list/revoke active sessions     ✅ DONE
+Phase 8  Account management: profile, password, delete      ✅ DONE
+Phase 9  Organizations: create, invite, roles, audit log    ✅ DONE
+Phase 10 Cleanup: remove Clerk SDK, secrets, old columns    ✅ DONE
 ```
 
 ## Files Changed (Go API)

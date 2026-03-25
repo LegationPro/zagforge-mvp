@@ -112,14 +112,14 @@ Backend logic:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/v1/{org}/{repo}/context-tokens` | Clerk JWT | List tokens (label, key_hint, last_used_at, expires_at) |
-| `POST` | `/api/v1/{org}/{repo}/context-tokens` | Clerk JWT | Create token — raw token returned once only |
-| `DELETE` | `/api/v1/{org}/{repo}/context-tokens/{id}` | Clerk JWT | Revoke token |
+| `GET` | `/api/v1/{org}/{repo}/context-tokens` | Zitadel OIDC JWT | List tokens (label, key_hint, last_used_at, expires_at) |
+| `POST` | `/api/v1/{org}/{repo}/context-tokens` | Zitadel OIDC JWT | Create token — raw token returned once only |
+| `DELETE` | `/api/v1/{org}/{repo}/context-tokens/{id}` | Zitadel OIDC JWT | Revoke token |
 
 ### AI Key Management
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `PUT` | `/api/v1/{org}/settings/ai-keys` | Clerk JWT | Store encrypted key `{ provider, raw_key }` |
-| `DELETE` | `/api/v1/{org}/settings/ai-keys/{provider}` | Clerk JWT | Remove key |
-| `GET` | `/api/v1/{org}/settings/ai-keys` | Clerk JWT | List `{ provider, key_hint, created_at }` — never raw key |
+| `PUT` | `/api/v1/{org}/settings/ai-keys` | Zitadel OIDC JWT | Store encrypted key `{ provider, raw_key }` |
+| `DELETE` | `/api/v1/{org}/settings/ai-keys/{provider}` | Zitadel OIDC JWT | Remove key |
+| `GET` | `/api/v1/{org}/settings/ai-keys` | Zitadel OIDC JWT | List `{ provider, key_hint, created_at }` — never raw key |

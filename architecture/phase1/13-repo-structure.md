@@ -53,7 +53,8 @@ zagforge-platform/
 │       │   ├── snapshots.go           # Snapshot retrieval
 │       │   └── watchdog.go            # Timeout handler
 │       ├── middleware/
-│       │   ├── clerk.go               # Clerk JWT validation
+│       │   ├── auth.go                # Zitadel OIDC JWT validation (JWKS)
+│       │   ├── scope.go              # Workspace scope resolution (personal/org)
 │       │   ├── internal_auth.go       # Signed token validation
 │       │   ├── oidc.go                # GCP OIDC token validation
 │       │   └── ratelimit.go           # Redis rate limiting middleware
