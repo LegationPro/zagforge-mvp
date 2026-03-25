@@ -9,7 +9,7 @@ import (
 var allEnvVars = []string{
 	"APP_ENV", "ENV_FILE",
 	"GITHUB_APP_ID", "GITHUB_APP_SLUG", "GITHUB_APP_WEBHOOK_SECRET", "GITHUB_APP_PRIVATE_KEY",
-	"CLERK_SECRET_KEY", "HMAC_SIGNING_KEY", "WATCHDOG_SECRET",
+	"ZITADEL_ISSUER_URL", "ZITADEL_PROJECT_ID", "HMAC_SIGNING_KEY", "WATCHDOG_SECRET",
 	"PORT",
 	"DATABASE_URL", "REDIS_URL",
 	"GCS_BUCKET", "GCS_ENDPOINT",
@@ -45,7 +45,8 @@ func validEnv() map[string]string {
 		"GITHUB_APP_SLUG":           "test-app",
 		"GITHUB_APP_WEBHOOK_SECRET": "secret",
 		"GITHUB_APP_PRIVATE_KEY":    "test-private-key",
-		"CLERK_SECRET_KEY":          "sk_test_xxx",
+		"ZITADEL_ISSUER_URL":        "https://auth.zagforge.com",
+		"ZITADEL_PROJECT_ID":        "123456789",
 		"HMAC_SIGNING_KEY":          "test-hmac-key",
 		"WATCHDOG_SECRET":           "test-watchdog-secret",
 		"PORT":                      "8080",
@@ -73,8 +74,11 @@ func TestLoad_success(t *testing.T) {
 	if cfg.App.GithubAppPrivateKey != "test-private-key" {
 		t.Errorf("expected private key %q, got %q", "test-private-key", cfg.App.GithubAppPrivateKey)
 	}
-	if cfg.App.ClerkSecretKey != "sk_test_xxx" {
-		t.Errorf("expected ClerkSecretKey %q, got %q", "sk_test_xxx", cfg.App.ClerkSecretKey)
+	if cfg.App.ZitadelIssuerURL != "https://auth.zagforge.com" {
+		t.Errorf("expected ZitadelIssuerURL %q, got %q", "https://auth.zagforge.com", cfg.App.ZitadelIssuerURL)
+	}
+	if cfg.App.ZitadelProjectID != "123456789" {
+		t.Errorf("expected ZitadelProjectID %q, got %q", "123456789", cfg.App.ZitadelProjectID)
 	}
 	if cfg.App.HMACSigningKey != "test-hmac-key" {
 		t.Errorf("expected HMACSigningKey %q, got %q", "test-hmac-key", cfg.App.HMACSigningKey)
@@ -123,7 +127,8 @@ func TestLoad_missingRequired(t *testing.T) {
 		"GITHUB_APP_SLUG",
 		"GITHUB_APP_WEBHOOK_SECRET",
 		"GITHUB_APP_PRIVATE_KEY",
-		"CLERK_SECRET_KEY",
+		"ZITADEL_ISSUER_URL",
+		"ZITADEL_PROJECT_ID",
 		"HMAC_SIGNING_KEY",
 		"WATCHDOG_SECRET",
 		"PORT",

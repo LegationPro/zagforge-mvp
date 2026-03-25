@@ -125,6 +125,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		TokenHash: hash,
 		Label:     pgtype.Text{String: body.Label, Valid: body.Label != ""},
 		ExpiresAt: expiresAt,
+		// UserID left as zero value (invalid UUID) for org-scoped tokens.
+		// Personal workspace tokens will set UserID instead of OrgID.
 	})
 	if err != nil {
 		h.log.Error("insert context token", zap.Error(err))
@@ -156,7 +158,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.db.Queries.DeleteContextToken(r.Context(), store.DeleteContextTokenParams{
+	if err := h.db.Queries.DeleteContextTokenForOrg(r.Context(), store.DeleteContextTokenForOrgParams{
 		ID: tokenID, OrgID: orgID,
 	}); err != nil {
 		h.log.Error("delete context token", zap.Error(err))

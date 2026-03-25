@@ -35,7 +35,7 @@ func NewHandler(db *dbpkg.DB, enc *encryption.Service, log *zap.Logger) *Handler
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := auth.OrgIDFromContext(r.Context())
 
-	keys, err := h.db.Queries.ListAIProviderKeys(r.Context(), orgID)
+	keys, err := h.db.Queries.ListAIProviderKeysByOrg(r.Context(), orgID)
 	if err != nil {
 		h.log.Error("list ai keys", zap.Error(err))
 		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
@@ -74,7 +74,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 
 	hint := "..." + body.RawKey[len(body.RawKey)-4:]
 
-	if _, err := h.db.Queries.UpsertAIProviderKey(r.Context(), store.UpsertAIProviderKeyParams{
+	if _, err := h.db.Queries.UpsertAIProviderKeyForOrg(r.Context(), store.UpsertAIProviderKeyForOrgParams{
 		OrgID:     orgID,
 		Provider:  body.Provider,
 		KeyCipher: cipher,
@@ -92,7 +92,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	orgID := auth.OrgIDFromContext(r.Context())
 	provider := chi.URLParam(r, "provider")
 
-	if err := h.db.Queries.DeleteAIProviderKey(r.Context(), store.DeleteAIProviderKeyParams{
+	if err := h.db.Queries.DeleteAIProviderKeyForOrg(r.Context(), store.DeleteAIProviderKeyForOrgParams{
 		OrgID: orgID, Provider: provider,
 	}); err != nil {
 		h.log.Error("delete ai key", zap.Error(err))

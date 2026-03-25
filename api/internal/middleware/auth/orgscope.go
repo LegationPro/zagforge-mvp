@@ -13,9 +13,11 @@ import (
 
 type orgIDKey struct{}
 
-// OrgScope returns middleware that resolves the Clerk org from JWT claims,
+// OrgScope returns middleware that resolves the org from JWT claims,
 // looks it up in the database, and stores the org ID in the request context.
 // Rejects requests with no active org or unknown org.
+// NOTE: This middleware will be replaced with a Scope() middleware in Phase 3
+// that supports both personal workspace (user_id) and org workspace (org_id).
 func OrgScope(queries *store.Queries, log *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,15 +27,15 @@ func OrgScope(queries *store.Queries, log *zap.Logger) func(http.Handler) http.H
 				return
 			}
 
-			clerkOrgID, err := ResolveClerkOrgID(claims)
+			zitadelOrgID, err := ResolveOrgID(claims)
 			if err != nil {
 				httputil.ErrResponse(w, http.StatusForbidden, ErrNoActiveOrg)
 				return
 			}
 
-			org, err := queries.GetOrgByClerkID(r.Context(), clerkOrgID)
+			org, err := queries.GetOrgByZitadelID(r.Context(), zitadelOrgID)
 			if err != nil {
-				log.Warn("org scope: org not found", zap.String("clerk_org_id", clerkOrgID))
+				log.Warn("org scope: org not found", zap.String("zitadel_org_id", zitadelOrgID))
 				httputil.ErrResponse(w, http.StatusForbidden, ErrNoActiveOrg)
 				return
 			}

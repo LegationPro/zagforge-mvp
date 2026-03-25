@@ -107,7 +107,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 // selectProvider finds the first configured AI provider key for the org.
 func (h *Handler) selectProvider(ctx context.Context, orgID pgtype.UUID) (string, []byte, error) {
 	for _, p := range ProviderOrder {
-		k, err := h.db.Queries.GetAIProviderKey(ctx, store.GetAIProviderKeyParams{
+		k, err := h.db.Queries.GetAIProviderKeyForOrg(ctx, store.GetAIProviderKeyForOrgParams{
 			OrgID: orgID, Provider: p,
 		})
 		if err != nil {

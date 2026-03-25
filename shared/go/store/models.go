@@ -5,6 +5,8 @@
 package store
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -14,6 +16,18 @@ type AiProviderKey struct {
 	Provider  string
 	KeyCipher []byte
 	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+	UserID    pgtype.UUID
+}
+
+type AuditLog struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	ActorID   pgtype.UUID
+	Action    string
+	TargetID  pgtype.UUID
+	Metadata  []byte
 	CreatedAt pgtype.Timestamptz
 }
 
@@ -27,6 +41,7 @@ type ContextToken struct {
 	LastUsedAt       pgtype.Timestamptz
 	ExpiresAt        pgtype.Timestamptz
 	CreatedAt        pgtype.Timestamptz
+	UserID           pgtype.UUID
 }
 
 type Job struct {
@@ -43,12 +58,21 @@ type Job struct {
 	FinishedAt   pgtype.Timestamptz
 }
 
+type Membership struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Role      string
+	InvitedBy pgtype.UUID
+	JoinedAt  pgtype.Timestamptz
+}
+
 type Organization struct {
-	ID         pgtype.UUID
-	ClerkOrgID string
-	Slug       string
-	Name       string
-	CreatedAt  pgtype.Timestamptz
+	ID           pgtype.UUID
+	Slug         string
+	Name         string
+	CreatedAt    pgtype.Timestamptz
+	ZitadelOrgID string
 }
 
 type Repository struct {
@@ -59,6 +83,17 @@ type Repository struct {
 	FullName       string
 	DefaultBranch  string
 	InstalledAt    pgtype.Timestamptz
+	UserID         pgtype.UUID
+}
+
+type Session struct {
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	ZitadelSessionID string
+	DeviceName       pgtype.Text
+	IpAddress        *netip.Addr
+	LastActiveAt     pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
 }
 
 type Snapshot struct {
@@ -73,4 +108,16 @@ type Snapshot struct {
 	SizeBytes       int64
 	CreatedAt       pgtype.Timestamptz
 	Metadata        []byte
+}
+
+type User struct {
+	ID            pgtype.UUID
+	ZitadelUserID string
+	Username      string
+	Email         string
+	EmailVerified bool
+	Phone         pgtype.Text
+	AvatarUrl     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }

@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -91,7 +90,8 @@ func run() error {
 		return fmt.Errorf("create client handler: %w", err)
 	}
 
-	clerk.SetKey(c.App.ClerkSecretKey)
+	// NOTE: Clerk SDK removed. Zitadel OIDC JWT verification will be added in Phase 3.
+	// The auth middleware still uses Clerk types until then.
 
 	signer := jobtoken.NewSigner([]byte(c.App.HMACSigningKey), 30*time.Minute)
 	if c.App.HMACSigningKeyPrev != "" {

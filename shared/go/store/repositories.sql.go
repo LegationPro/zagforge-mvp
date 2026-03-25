@@ -12,7 +12,7 @@ import (
 )
 
 const getRepoByFullNameAndOrg = `-- name: GetRepoByFullNameAndOrg :one
-SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at FROM repositories WHERE full_name = $1 AND org_id = $2
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories WHERE full_name = $1 AND org_id = $2
 `
 
 type GetRepoByFullNameAndOrgParams struct {
@@ -31,12 +31,38 @@ func (q *Queries) GetRepoByFullNameAndOrg(ctx context.Context, arg GetRepoByFull
 		&i.FullName,
 		&i.DefaultBranch,
 		&i.InstalledAt,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getRepoByFullNameAndUser = `-- name: GetRepoByFullNameAndUser :one
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories WHERE full_name = $1 AND user_id = $2
+`
+
+type GetRepoByFullNameAndUserParams struct {
+	FullName string
+	UserID   pgtype.UUID
+}
+
+func (q *Queries) GetRepoByFullNameAndUser(ctx context.Context, arg GetRepoByFullNameAndUserParams) (Repository, error) {
+	row := q.db.QueryRow(ctx, getRepoByFullNameAndUser, arg.FullName, arg.UserID)
+	var i Repository
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.GithubRepoID,
+		&i.InstallationID,
+		&i.FullName,
+		&i.DefaultBranch,
+		&i.InstalledAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getRepoByGithubID = `-- name: GetRepoByGithubID :one
-SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at FROM repositories WHERE github_repo_id = $1
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories WHERE github_repo_id = $1
 `
 
 func (q *Queries) GetRepoByGithubID(ctx context.Context, githubRepoID int64) (Repository, error) {
@@ -50,12 +76,13 @@ func (q *Queries) GetRepoByGithubID(ctx context.Context, githubRepoID int64) (Re
 		&i.FullName,
 		&i.DefaultBranch,
 		&i.InstalledAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const getRepoByID = `-- name: GetRepoByID :one
-SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at FROM repositories WHERE id = $1
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories WHERE id = $1
 `
 
 func (q *Queries) GetRepoByID(ctx context.Context, id pgtype.UUID) (Repository, error) {
@@ -69,12 +96,13 @@ func (q *Queries) GetRepoByID(ctx context.Context, id pgtype.UUID) (Repository, 
 		&i.FullName,
 		&i.DefaultBranch,
 		&i.InstalledAt,
+		&i.UserID,
 	)
 	return i, err
 }
 
 const listReposByOrg = `-- name: ListReposByOrg :many
-SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at FROM repositories
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories
 WHERE org_id = $1
   AND full_name > $2
 ORDER BY full_name ASC
@@ -104,6 +132,50 @@ func (q *Queries) ListReposByOrg(ctx context.Context, arg ListReposByOrgParams) 
 			&i.FullName,
 			&i.DefaultBranch,
 			&i.InstalledAt,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReposByUser = `-- name: ListReposByUser :many
+SELECT id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id FROM repositories
+WHERE user_id = $1
+  AND full_name > $2
+ORDER BY full_name ASC
+LIMIT $3
+`
+
+type ListReposByUserParams struct {
+	UserID   pgtype.UUID
+	FullName string
+	Limit    int32
+}
+
+func (q *Queries) ListReposByUser(ctx context.Context, arg ListReposByUserParams) ([]Repository, error) {
+	rows, err := q.db.Query(ctx, listReposByUser, arg.UserID, arg.FullName, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Repository
+	for rows.Next() {
+		var i Repository
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.GithubRepoID,
+			&i.InstallationID,
+			&i.FullName,
+			&i.DefaultBranch,
+			&i.InstalledAt,
+			&i.UserID,
 		); err != nil {
 			return nil, err
 		}
@@ -116,16 +188,17 @@ func (q *Queries) ListReposByOrg(ctx context.Context, arg ListReposByOrgParams) 
 }
 
 const upsertRepo = `-- name: UpsertRepo :one
-INSERT INTO repositories (org_id, github_repo_id, installation_id, full_name, default_branch)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO repositories (user_id, org_id, github_repo_id, installation_id, full_name, default_branch)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (github_repo_id) DO UPDATE
     SET installation_id = EXCLUDED.installation_id,
         full_name       = EXCLUDED.full_name,
         default_branch  = EXCLUDED.default_branch
-RETURNING id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at
+RETURNING id, org_id, github_repo_id, installation_id, full_name, default_branch, installed_at, user_id
 `
 
 type UpsertRepoParams struct {
+	UserID         pgtype.UUID
 	OrgID          pgtype.UUID
 	GithubRepoID   int64
 	InstallationID int64
@@ -135,6 +208,7 @@ type UpsertRepoParams struct {
 
 func (q *Queries) UpsertRepo(ctx context.Context, arg UpsertRepoParams) (Repository, error) {
 	row := q.db.QueryRow(ctx, upsertRepo,
+		arg.UserID,
 		arg.OrgID,
 		arg.GithubRepoID,
 		arg.InstallationID,
@@ -150,6 +224,7 @@ func (q *Queries) UpsertRepo(ctx context.Context, arg UpsertRepoParams) (Reposit
 		&i.FullName,
 		&i.DefaultBranch,
 		&i.InstalledAt,
+		&i.UserID,
 	)
 	return i, err
 }

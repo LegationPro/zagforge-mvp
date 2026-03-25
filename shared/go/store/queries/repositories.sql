@@ -1,6 +1,6 @@
 -- name: UpsertRepo :one
-INSERT INTO repositories (org_id, github_repo_id, installation_id, full_name, default_branch)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO repositories (user_id, org_id, github_repo_id, installation_id, full_name, default_branch)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (github_repo_id) DO UPDATE
     SET installation_id = EXCLUDED.installation_id,
         full_name       = EXCLUDED.full_name,
@@ -20,5 +20,15 @@ WHERE org_id = $1
 ORDER BY full_name ASC
 LIMIT $3;
 
+-- name: ListReposByUser :many
+SELECT * FROM repositories
+WHERE user_id = $1
+  AND full_name > $2
+ORDER BY full_name ASC
+LIMIT $3;
+
 -- name: GetRepoByFullNameAndOrg :one
 SELECT * FROM repositories WHERE full_name = $1 AND org_id = $2;
+
+-- name: GetRepoByFullNameAndUser :one
+SELECT * FROM repositories WHERE full_name = $1 AND user_id = $2;

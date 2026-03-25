@@ -9,7 +9,7 @@ import (
 
 func TestResolveOrgIDMissingOrg(t *testing.T) {
 	claims := &clerk.SessionClaims{} // no active org
-	_, err := auth.ResolveClerkOrgID(claims)
+	_, err := auth.ResolveOrgID(claims)
 	if err == nil {
 		t.Fatal("expected error when no active org in claims")
 	}

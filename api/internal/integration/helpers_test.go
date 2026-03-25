@@ -153,9 +153,9 @@ func (e *testEnv) seed(t *testing.T) (orgID, repoID string) {
 	ctx := context.Background()
 
 	org, err := e.db.Queries.UpsertOrg(ctx, store.UpsertOrgParams{
-		ClerkOrgID: fmt.Sprintf("test_org_%d", time.Now().UnixNano()),
-		Slug:       fmt.Sprintf("test-%d", time.Now().UnixNano()),
-		Name:       "Test Org",
+		ZitadelOrgID: fmt.Sprintf("test_org_%d", time.Now().UnixNano()),
+		Slug:         fmt.Sprintf("test-%d", time.Now().UnixNano()),
+		Name:         "Test Org",
 	})
 	if err != nil {
 		t.Fatalf("seed org: %v", err)
@@ -181,9 +181,9 @@ func (e *testEnv) seedWithNames(t *testing.T, orgSlug, repoFullName string) (org
 	ctx := context.Background()
 
 	org, err := e.db.Queries.UpsertOrg(ctx, store.UpsertOrgParams{
-		ClerkOrgID: fmt.Sprintf("test_org_%d", time.Now().UnixNano()),
-		Slug:       orgSlug,
-		Name:       "Test Org",
+		ZitadelOrgID: fmt.Sprintf("test_org_%d", time.Now().UnixNano()),
+		Slug:         orgSlug,
+		Name:         "Test Org",
 	})
 	if err != nil {
 		t.Fatalf("seed org: %v", err)

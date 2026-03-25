@@ -11,17 +11,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteContextToken = `-- name: DeleteContextToken :exec
+const deleteContextTokenForOrg = `-- name: DeleteContextTokenForOrg :exec
 DELETE FROM context_tokens WHERE id = $1 AND org_id = $2
 `
 
-type DeleteContextTokenParams struct {
+type DeleteContextTokenForOrgParams struct {
 	ID    pgtype.UUID
 	OrgID pgtype.UUID
 }
 
-func (q *Queries) DeleteContextToken(ctx context.Context, arg DeleteContextTokenParams) error {
-	_, err := q.db.Exec(ctx, deleteContextToken, arg.ID, arg.OrgID)
+func (q *Queries) DeleteContextTokenForOrg(ctx context.Context, arg DeleteContextTokenForOrgParams) error {
+	_, err := q.db.Exec(ctx, deleteContextTokenForOrg, arg.ID, arg.OrgID)
+	return err
+}
+
+const deleteContextTokenForUser = `-- name: DeleteContextTokenForUser :exec
+DELETE FROM context_tokens WHERE id = $1 AND user_id = $2
+`
+
+type DeleteContextTokenForUserParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) DeleteContextTokenForUser(ctx context.Context, arg DeleteContextTokenForUserParams) error {
+	_, err := q.db.Exec(ctx, deleteContextTokenForUser, arg.ID, arg.UserID)
 	return err
 }
 
@@ -35,18 +49,32 @@ func (q *Queries) DeleteExpiredContextTokens(ctx context.Context) error {
 }
 
 const getContextTokenByHash = `-- name: GetContextTokenByHash :one
-SELECT id, repo_id, org_id, target_snapshot_id, token_hash,
+SELECT id, repo_id, user_id, org_id, target_snapshot_id, token_hash,
     label, last_used_at, expires_at, created_at
 FROM context_tokens
 WHERE token_hash = $1
 `
 
-func (q *Queries) GetContextTokenByHash(ctx context.Context, tokenHash string) (ContextToken, error) {
+type GetContextTokenByHashRow struct {
+	ID               pgtype.UUID
+	RepoID           pgtype.UUID
+	UserID           pgtype.UUID
+	OrgID            pgtype.UUID
+	TargetSnapshotID pgtype.UUID
+	TokenHash        string
+	Label            pgtype.Text
+	LastUsedAt       pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetContextTokenByHash(ctx context.Context, tokenHash string) (GetContextTokenByHashRow, error) {
 	row := q.db.QueryRow(ctx, getContextTokenByHash, tokenHash)
-	var i ContextToken
+	var i GetContextTokenByHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.RepoID,
+		&i.UserID,
 		&i.OrgID,
 		&i.TargetSnapshotID,
 		&i.TokenHash,
@@ -59,15 +87,16 @@ func (q *Queries) GetContextTokenByHash(ctx context.Context, tokenHash string) (
 }
 
 const insertContextToken = `-- name: InsertContextToken :one
-INSERT INTO context_tokens (repo_id, org_id,
+INSERT INTO context_tokens (repo_id, user_id, org_id,
 target_snapshot_id, token_hash, label, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, repo_id, org_id, target_snapshot_id,
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, repo_id, user_id, org_id, target_snapshot_id,
 token_hash, label, last_used_at, expires_at, created_at
 `
 
 type InsertContextTokenParams struct {
 	RepoID           pgtype.UUID
+	UserID           pgtype.UUID
 	OrgID            pgtype.UUID
 	TargetSnapshotID pgtype.UUID
 	TokenHash        string
@@ -75,19 +104,34 @@ type InsertContextTokenParams struct {
 	ExpiresAt        pgtype.Timestamptz
 }
 
-func (q *Queries) InsertContextToken(ctx context.Context, arg InsertContextTokenParams) (ContextToken, error) {
+type InsertContextTokenRow struct {
+	ID               pgtype.UUID
+	RepoID           pgtype.UUID
+	UserID           pgtype.UUID
+	OrgID            pgtype.UUID
+	TargetSnapshotID pgtype.UUID
+	TokenHash        string
+	Label            pgtype.Text
+	LastUsedAt       pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) InsertContextToken(ctx context.Context, arg InsertContextTokenParams) (InsertContextTokenRow, error) {
 	row := q.db.QueryRow(ctx, insertContextToken,
 		arg.RepoID,
+		arg.UserID,
 		arg.OrgID,
 		arg.TargetSnapshotID,
 		arg.TokenHash,
 		arg.Label,
 		arg.ExpiresAt,
 	)
-	var i ContextToken
+	var i InsertContextTokenRow
 	err := row.Scan(
 		&i.ID,
 		&i.RepoID,
+		&i.UserID,
 		&i.OrgID,
 		&i.TargetSnapshotID,
 		&i.TokenHash,
@@ -100,7 +144,7 @@ func (q *Queries) InsertContextToken(ctx context.Context, arg InsertContextToken
 }
 
 const listContextTokensByRepo = `-- name: ListContextTokensByRepo :many
-SELECT id, repo_id, org_id, target_snapshot_id, label,
+SELECT id, repo_id, user_id, org_id, target_snapshot_id, label,
     last_used_at, expires_at, created_at
 FROM context_tokens
 WHERE repo_id = $1
@@ -110,6 +154,7 @@ ORDER BY created_at DESC
 type ListContextTokensByRepoRow struct {
 	ID               pgtype.UUID
 	RepoID           pgtype.UUID
+	UserID           pgtype.UUID
 	OrgID            pgtype.UUID
 	TargetSnapshotID pgtype.UUID
 	Label            pgtype.Text
@@ -130,6 +175,7 @@ func (q *Queries) ListContextTokensByRepo(ctx context.Context, repoID pgtype.UUI
 		if err := rows.Scan(
 			&i.ID,
 			&i.RepoID,
+			&i.UserID,
 			&i.OrgID,
 			&i.TargetSnapshotID,
 			&i.Label,

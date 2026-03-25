@@ -11,36 +11,61 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteAIProviderKey = `-- name: DeleteAIProviderKey :exec
+const deleteAIProviderKeyForOrg = `-- name: DeleteAIProviderKeyForOrg :exec
 DELETE FROM ai_provider_keys WHERE org_id = $1 AND provider = $2
 `
 
-type DeleteAIProviderKeyParams struct {
+type DeleteAIProviderKeyForOrgParams struct {
 	OrgID    pgtype.UUID
 	Provider string
 }
 
-func (q *Queries) DeleteAIProviderKey(ctx context.Context, arg DeleteAIProviderKeyParams) error {
-	_, err := q.db.Exec(ctx, deleteAIProviderKey, arg.OrgID, arg.Provider)
+func (q *Queries) DeleteAIProviderKeyForOrg(ctx context.Context, arg DeleteAIProviderKeyForOrgParams) error {
+	_, err := q.db.Exec(ctx, deleteAIProviderKeyForOrg, arg.OrgID, arg.Provider)
 	return err
 }
 
-const getAIProviderKey = `-- name: GetAIProviderKey :one
-SELECT id, org_id, provider, key_cipher, key_hint, created_at
+const deleteAIProviderKeyForUser = `-- name: DeleteAIProviderKeyForUser :exec
+DELETE FROM ai_provider_keys WHERE user_id = $1 AND provider = $2
+`
+
+type DeleteAIProviderKeyForUserParams struct {
+	UserID   pgtype.UUID
+	Provider string
+}
+
+func (q *Queries) DeleteAIProviderKeyForUser(ctx context.Context, arg DeleteAIProviderKeyForUserParams) error {
+	_, err := q.db.Exec(ctx, deleteAIProviderKeyForUser, arg.UserID, arg.Provider)
+	return err
+}
+
+const getAIProviderKeyForOrg = `-- name: GetAIProviderKeyForOrg :one
+SELECT id, user_id, org_id, provider, key_cipher, key_hint, created_at
 FROM ai_provider_keys
 WHERE org_id = $1 AND provider = $2
 `
 
-type GetAIProviderKeyParams struct {
+type GetAIProviderKeyForOrgParams struct {
 	OrgID    pgtype.UUID
 	Provider string
 }
 
-func (q *Queries) GetAIProviderKey(ctx context.Context, arg GetAIProviderKeyParams) (AiProviderKey, error) {
-	row := q.db.QueryRow(ctx, getAIProviderKey, arg.OrgID, arg.Provider)
-	var i AiProviderKey
+type GetAIProviderKeyForOrgRow struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Provider  string
+	KeyCipher []byte
+	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetAIProviderKeyForOrg(ctx context.Context, arg GetAIProviderKeyForOrgParams) (GetAIProviderKeyForOrgRow, error) {
+	row := q.db.QueryRow(ctx, getAIProviderKeyForOrg, arg.OrgID, arg.Provider)
+	var i GetAIProviderKeyForOrgRow
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
 		&i.OrgID,
 		&i.Provider,
 		&i.KeyCipher,
@@ -50,32 +75,70 @@ func (q *Queries) GetAIProviderKey(ctx context.Context, arg GetAIProviderKeyPara
 	return i, err
 }
 
-const listAIProviderKeys = `-- name: ListAIProviderKeys :many
-SELECT id, org_id, provider, key_hint, created_at
+const getAIProviderKeyForUser = `-- name: GetAIProviderKeyForUser :one
+SELECT id, user_id, org_id, provider, key_cipher, key_hint, created_at
+FROM ai_provider_keys
+WHERE user_id = $1 AND provider = $2
+`
+
+type GetAIProviderKeyForUserParams struct {
+	UserID   pgtype.UUID
+	Provider string
+}
+
+type GetAIProviderKeyForUserRow struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Provider  string
+	KeyCipher []byte
+	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetAIProviderKeyForUser(ctx context.Context, arg GetAIProviderKeyForUserParams) (GetAIProviderKeyForUserRow, error) {
+	row := q.db.QueryRow(ctx, getAIProviderKeyForUser, arg.UserID, arg.Provider)
+	var i GetAIProviderKeyForUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrgID,
+		&i.Provider,
+		&i.KeyCipher,
+		&i.KeyHint,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAIProviderKeysByOrg = `-- name: ListAIProviderKeysByOrg :many
+SELECT id, user_id, org_id, provider, key_hint, created_at
 FROM ai_provider_keys
 WHERE org_id = $1
 ORDER BY provider ASC
 `
 
-type ListAIProviderKeysRow struct {
+type ListAIProviderKeysByOrgRow struct {
 	ID        pgtype.UUID
+	UserID    pgtype.UUID
 	OrgID     pgtype.UUID
 	Provider  string
 	KeyHint   string
 	CreatedAt pgtype.Timestamptz
 }
 
-func (q *Queries) ListAIProviderKeys(ctx context.Context, orgID pgtype.UUID) ([]ListAIProviderKeysRow, error) {
-	rows, err := q.db.Query(ctx, listAIProviderKeys, orgID)
+func (q *Queries) ListAIProviderKeysByOrg(ctx context.Context, orgID pgtype.UUID) ([]ListAIProviderKeysByOrgRow, error) {
+	rows, err := q.db.Query(ctx, listAIProviderKeysByOrg, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAIProviderKeysRow
+	var items []ListAIProviderKeysByOrgRow
 	for rows.Next() {
-		var i ListAIProviderKeysRow
+		var i ListAIProviderKeysByOrgRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.OrgID,
 			&i.Provider,
 			&i.KeyHint,
@@ -91,33 +154,132 @@ func (q *Queries) ListAIProviderKeys(ctx context.Context, orgID pgtype.UUID) ([]
 	return items, nil
 }
 
-const upsertAIProviderKey = `-- name: UpsertAIProviderKey :one
-INSERT INTO ai_provider_keys (org_id, provider, key_cipher, key_hint)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (org_id, provider) DO UPDATE
-    SET key_cipher = EXCLUDED.key_cipher,
-    key_hint = EXCLUDED.key_hint
-RETURNING id, org_id, provider, key_cipher, key_hint,
-created_at
+const listAIProviderKeysByUser = `-- name: ListAIProviderKeysByUser :many
+SELECT id, user_id, org_id, provider, key_hint, created_at
+FROM ai_provider_keys
+WHERE user_id = $1
+ORDER BY provider ASC
 `
 
-type UpsertAIProviderKeyParams struct {
+type ListAIProviderKeysByUserRow struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Provider  string
+	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListAIProviderKeysByUser(ctx context.Context, userID pgtype.UUID) ([]ListAIProviderKeysByUserRow, error) {
+	rows, err := q.db.Query(ctx, listAIProviderKeysByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAIProviderKeysByUserRow
+	for rows.Next() {
+		var i ListAIProviderKeysByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.OrgID,
+			&i.Provider,
+			&i.KeyHint,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertAIProviderKeyForOrg = `-- name: UpsertAIProviderKeyForOrg :one
+INSERT INTO ai_provider_keys (org_id, provider, key_cipher, key_hint)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, provider) WHERE org_id IS NOT NULL DO UPDATE
+    SET key_cipher = EXCLUDED.key_cipher,
+    key_hint = EXCLUDED.key_hint
+RETURNING id, user_id, org_id, provider, key_cipher, key_hint, created_at
+`
+
+type UpsertAIProviderKeyForOrgParams struct {
 	OrgID     pgtype.UUID
 	Provider  string
 	KeyCipher []byte
 	KeyHint   string
 }
 
-func (q *Queries) UpsertAIProviderKey(ctx context.Context, arg UpsertAIProviderKeyParams) (AiProviderKey, error) {
-	row := q.db.QueryRow(ctx, upsertAIProviderKey,
+type UpsertAIProviderKeyForOrgRow struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Provider  string
+	KeyCipher []byte
+	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertAIProviderKeyForOrg(ctx context.Context, arg UpsertAIProviderKeyForOrgParams) (UpsertAIProviderKeyForOrgRow, error) {
+	row := q.db.QueryRow(ctx, upsertAIProviderKeyForOrg,
 		arg.OrgID,
 		arg.Provider,
 		arg.KeyCipher,
 		arg.KeyHint,
 	)
-	var i AiProviderKey
+	var i UpsertAIProviderKeyForOrgRow
 	err := row.Scan(
 		&i.ID,
+		&i.UserID,
+		&i.OrgID,
+		&i.Provider,
+		&i.KeyCipher,
+		&i.KeyHint,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertAIProviderKeyForUser = `-- name: UpsertAIProviderKeyForUser :one
+INSERT INTO ai_provider_keys (user_id, provider, key_cipher, key_hint)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id, provider) WHERE user_id IS NOT NULL DO UPDATE
+    SET key_cipher = EXCLUDED.key_cipher,
+    key_hint = EXCLUDED.key_hint
+RETURNING id, user_id, org_id, provider, key_cipher, key_hint, created_at
+`
+
+type UpsertAIProviderKeyForUserParams struct {
+	UserID    pgtype.UUID
+	Provider  string
+	KeyCipher []byte
+	KeyHint   string
+}
+
+type UpsertAIProviderKeyForUserRow struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	OrgID     pgtype.UUID
+	Provider  string
+	KeyCipher []byte
+	KeyHint   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertAIProviderKeyForUser(ctx context.Context, arg UpsertAIProviderKeyForUserParams) (UpsertAIProviderKeyForUserRow, error) {
+	row := q.db.QueryRow(ctx, upsertAIProviderKeyForUser,
+		arg.UserID,
+		arg.Provider,
+		arg.KeyCipher,
+		arg.KeyHint,
+	)
+	var i UpsertAIProviderKeyForUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
 		&i.OrgID,
 		&i.Provider,
 		&i.KeyCipher,

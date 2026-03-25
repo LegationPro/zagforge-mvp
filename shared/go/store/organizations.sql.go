@@ -7,27 +7,55 @@ package store
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getOrgByClerkID = `-- name: GetOrgByClerkID :one
-SELECT id, clerk_org_id, slug, name, created_at FROM organizations WHERE clerk_org_id = $1
+const deleteOrganization = `-- name: DeleteOrganization :exec
+DELETE FROM organizations WHERE id = $1
 `
 
-func (q *Queries) GetOrgByClerkID(ctx context.Context, clerkOrgID string) (Organization, error) {
-	row := q.db.QueryRow(ctx, getOrgByClerkID, clerkOrgID)
+func (q *Queries) DeleteOrganization(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOrganization, id)
+	return err
+}
+
+const getOrgByZitadelID = `-- name: GetOrgByZitadelID :one
+SELECT id, slug, name, created_at, zitadel_org_id FROM organizations WHERE zitadel_org_id = $1
+`
+
+func (q *Queries) GetOrgByZitadelID(ctx context.Context, zitadelOrgID string) (Organization, error) {
+	row := q.db.QueryRow(ctx, getOrgByZitadelID, zitadelOrgID)
 	var i Organization
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkOrgID,
 		&i.Slug,
 		&i.Name,
 		&i.CreatedAt,
+		&i.ZitadelOrgID,
+	)
+	return i, err
+}
+
+const getOrganizationByID = `-- name: GetOrganizationByID :one
+SELECT id, slug, name, created_at, zitadel_org_id FROM organizations WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationByID(ctx context.Context, id pgtype.UUID) (Organization, error) {
+	row := q.db.QueryRow(ctx, getOrganizationByID, id)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.CreatedAt,
+		&i.ZitadelOrgID,
 	)
 	return i, err
 }
 
 const getOrganizationBySlug = `-- name: GetOrganizationBySlug :one
-SELECT id, clerk_org_id, slug, name, created_at FROM organizations WHERE slug = $1
+SELECT id, slug, name, created_at, zitadel_org_id FROM organizations WHERE slug = $1
 `
 
 func (q *Queries) GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error) {
@@ -35,37 +63,62 @@ func (q *Queries) GetOrganizationBySlug(ctx context.Context, slug string) (Organ
 	var i Organization
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkOrgID,
 		&i.Slug,
 		&i.Name,
 		&i.CreatedAt,
+		&i.ZitadelOrgID,
+	)
+	return i, err
+}
+
+const updateOrganization = `-- name: UpdateOrganization :one
+UPDATE organizations SET name = $2, slug = $3
+WHERE id = $1
+RETURNING id, slug, name, created_at, zitadel_org_id
+`
+
+type UpdateOrganizationParams struct {
+	ID   pgtype.UUID
+	Name string
+	Slug string
+}
+
+func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, updateOrganization, arg.ID, arg.Name, arg.Slug)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.CreatedAt,
+		&i.ZitadelOrgID,
 	)
 	return i, err
 }
 
 const upsertOrg = `-- name: UpsertOrg :one
-INSERT INTO organizations (clerk_org_id, slug, name)
+INSERT INTO organizations (zitadel_org_id, slug, name)
 VALUES ($1, $2, $3)
-ON CONFLICT (clerk_org_id) DO UPDATE
+ON CONFLICT (zitadel_org_id) DO UPDATE
     SET name = EXCLUDED.name
-RETURNING id, clerk_org_id, slug, name, created_at
+RETURNING id, slug, name, created_at, zitadel_org_id
 `
 
 type UpsertOrgParams struct {
-	ClerkOrgID string
-	Slug       string
-	Name       string
+	ZitadelOrgID string
+	Slug         string
+	Name         string
 }
 
 func (q *Queries) UpsertOrg(ctx context.Context, arg UpsertOrgParams) (Organization, error) {
-	row := q.db.QueryRow(ctx, upsertOrg, arg.ClerkOrgID, arg.Slug, arg.Name)
+	row := q.db.QueryRow(ctx, upsertOrg, arg.ZitadelOrgID, arg.Slug, arg.Name)
 	var i Organization
 	err := row.Scan(
 		&i.ID,
-		&i.ClerkOrgID,
 		&i.Slug,
 		&i.Name,
 		&i.CreatedAt,
+		&i.ZitadelOrgID,
 	)
 	return i, err
 }
