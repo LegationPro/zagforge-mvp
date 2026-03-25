@@ -126,7 +126,7 @@ The Query Console is the dashboard-embedded AI chat, powered by the same assembl
 
 ```
 POST /api/v1/{org}/{repo}/query
-Auth: Clerk JWT
+Auth: Zitadel OIDC JWT
 Body: { question: string, snapshot_id?: uuid }
 Response: text/event-stream (SSE)
 ```

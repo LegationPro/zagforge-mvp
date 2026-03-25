@@ -30,7 +30,7 @@ Future (not phased): Analytics charts, Stripe billing, GitLab/Bitbucket provider
 |---|---|---|
 | Backend | Go (Chi router) | Strong stdlib, single binary, excellent concurrency |
 | Database | Neon Postgres (free) → Cloud SQL (prod) + sqlc | Neon free tier for dev/early stage; swap to Cloud SQL for production. Standard Postgres connection string, no code changes needed |
-| Auth | Clerk | Org management, API keys, Next.js + Go middleware |
+| Auth | Zitadel (self-hosted on Cloud Run) | OIDC/JWT, org management, SSO (Google, GitHub), session management. Standalone Go container — decoupled from Next.js for future mobile clients |
 | Snapshot engine | Cloud Run Jobs | Per-job isolation, scales to zero, no idle cost |
 | API hosting | Cloud Run | Auto-scaling, HTTPS termination, per-second billing |
 | Job queue | Cloud Tasks | Managed, retries, scales to zero |
@@ -38,7 +38,7 @@ Future (not phased): Analytics charts, Stripe billing, GitLab/Bitbucket provider
 | Secret management (prod) | Google Secret Manager | Worker tokens, GitHub App keys, webhook secrets |
 | Secret management (dev) | Doppler | Team-shared secrets injection, no `.env` files with real values |
 | Config loading | `caarlos0/env` | Struct-based env parsing with validation, defaults, and required fields |
-| Dashboard | Next.js (Turborepo monorepo, `apps/cloud`) | Rich interactivity, Clerk SDK, TanStack Query, Tailwind v4 |
+| Dashboard | Next.js (Turborepo monorepo, `apps/cloud`) | Rich interactivity, Zitadel OIDC, TanStack Query, Tailwind v4 |
 | Context cache | Redis LRU (in-memory, TTL 10 min) | Avoids redundant GitHub API calls during Query Console sessions |
 | Git provider | GitHub first | Provider-agnostic interface for future expansion |
 

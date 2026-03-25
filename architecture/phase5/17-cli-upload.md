@@ -80,13 +80,13 @@ The runner POSTs a `snapshot_version: 2` JSON payload — **no file contents**:
 
 ## Auth: CLI Tokens (`zf_pk_*`)
 
-CLI tokens are long-lived API keys issued by Zagforge, distinct from Clerk session JWTs.
+CLI tokens are long-lived API keys issued by Zagforge, distinct from Zitadel OIDC session JWTs.
 
 **Format:** `zf_pk_<random>` — prefix `zf_pk_` enables GitHub secret scanning (automatic alerts if committed).
 
 **Storage:** Only the SHA-256 hash is stored server-side (in `api_keys` table or equivalent). The raw token is shown once at creation.
 
-**Middleware:** `POST /api/v1/upload` uses a dedicated CLI token middleware, not `clerkjwt.Verify()`. The middleware:
+**Middleware:** `POST /api/v1/upload` uses a dedicated CLI token middleware, not the OIDC JWT verification middleware. The middleware:
 1. Extracts the bearer token from `Authorization` header
 2. Computes SHA-256 hash, looks up in token store
 3. Resolves to `org_id`

@@ -17,8 +17,8 @@ Add a `visibility` field to context tokens with three modes:
 | Mode | Who can access | Auth required | Use case |
 |---|---|---|---|
 | **Public** (default) | Anyone with the token | None | AI tools, external collaborators |
-| **Private** | Org members only | Clerk JWT | Internal team use |
-| **Protected** | Invited users only | Clerk JWT + allowlist | Selective sharing with contractors/partners |
+| **Private** | Org members or account owner only | Zitadel OIDC JWT | Internal team use |
+| **Protected** | Invited users only | Zitadel OIDC JWT + allowlist | Selective sharing with contractors/partners |
 
 ---
 
@@ -35,9 +35,9 @@ ALTER TABLE context_tokens ADD COLUMN visibility context_visibility NOT NULL DEF
 CREATE TABLE context_token_allowed_users (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token_id   UUID NOT NULL REFERENCES context_tokens(id) ON DELETE CASCADE,
-    clerk_user_id TEXT NOT NULL,
+    zitadel_user_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (token_id, clerk_user_id)
+    UNIQUE (token_id, zitadel_user_id)
 );
 
 CREATE INDEX idx_context_token_allowed_users_token ON context_token_allowed_users (token_id);
@@ -83,7 +83,7 @@ DROP TYPE IF EXISTS context_visibility;
 
 ```json
 {
-  "clerk_user_ids": ["user_2abc123", "user_2def456"]
+  "zitadel_user_ids": ["user_2abc123", "user_2def456"]
 }
 ```
 
@@ -99,10 +99,10 @@ DROP TYPE IF EXISTS context_visibility;
 
 For private/protected tokens, the context URL handler must:
 1. Check `token.visibility`
-2. If not `public`, require `Authorization: Bearer <clerk_jwt>` header
-3. Verify Clerk JWT and extract user identity
-4. Private: verify user's org matches `token.org_id`
-5. Protected: verify user's Clerk ID is in `context_token_allowed_users`
+2. If not `public`, require `Authorization: Bearer <zitadel_jwt>` header
+3. Verify Zitadel JWT and extract user identity
+4. Private: verify user owns the token (personal) or is a member of `token.org_id` (org)
+5. Protected: verify user's Zitadel ID is in `context_token_allowed_users`
 
 ---
 
@@ -119,7 +119,7 @@ GET /v1/context/{token}
   │   └─ Verify org == token.org_id → proceed or 403
   └─ If visibility == "protected"
       ├─ Require Clerk JWT
-      ├─ Extract clerk_user_id from claims
+      ├─ Extract zitadel_user_id from claims
       └─ Query context_token_allowed_users → proceed or 403
 ```
 

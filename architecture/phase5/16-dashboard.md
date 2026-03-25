@@ -9,7 +9,7 @@ The dashboard is a Next.js application living at `apps/cloud` inside the existin
 - **Domain:** `cloud.zagforge.com`
 - **Platform:** Vercel (separate project, same monorepo — same pattern as `apps/web` and `apps/docs`)
 - **Turbo pipeline:** add `apps/cloud` to `turbo.json` with the same `build`, `dev`, `lint`, `typecheck` tasks
-- **Env vars:** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_API_URL` (points to `api.zagforge.com`), `NEXT_PUBLIC_COOKIE_DOMAIN=.zagforge.com`
+- **Env vars:** `NEXT_PUBLIC_ZITADEL_ISSUER_URL` (e.g. `https://auth.zagforge.com`), `NEXT_PUBLIC_ZITADEL_CLIENT_ID`, `NEXT_PUBLIC_API_URL` (points to `api.zagforge.com`), `NEXT_PUBLIC_COOKIE_DOMAIN=.zagforge.com`
 
 ---
 
@@ -25,7 +25,7 @@ The dashboard is a Next.js application living at `apps/cloud` inside the existin
 |---------|--------|
 | Framework | Next.js 16 (App Router) |
 | React | React 19 (React Compiler handles memoization) |
-| Auth | Clerk headless (`useSignIn`, `useSignUp`, `useOrganization` hooks) |
+| Auth | Zitadel OIDC (Authorization Code + PKCE via `oidc-client-ts` or `next-auth` with Zitadel provider) |
 | Data fetching | TanStack Query v5 |
 | UI components | `@workspace/ui` (shadcn + Base UI + Radix + Tailwind v4) |
 | Styling | Tailwind v4 (shared postcss config from `@workspace/ui`) |
@@ -42,13 +42,12 @@ The dashboard is a Next.js application living at `apps/cloud` inside the existin
 apps/cloud/
   app/
     (auth)/                          ← no sidebar, centered card layout
-      sign-in/page.tsx
-      sign-up/page.tsx
-      forgot-password/page.tsx
-      verify/page.tsx                ← email verification step after sign-up
+      sign-in/page.tsx               ← redirects to Zitadel login (or custom form, Option B)
+      sign-up/page.tsx               ← redirects to Zitadel register (or custom form, Option B)
+      callback/page.tsx              ← OIDC callback handler (exchanges code for tokens)
       layout.tsx
 
-    (dashboard)/                     ← authenticated, sidebar + org switcher
+    (dashboard)/                     ← authenticated, sidebar + workspace switcher
       layout.tsx
       page.tsx                       ← redirect → /repos
 
@@ -57,9 +56,19 @@ apps/cloud/
         [[...repo]]/
           page.tsx                   ← Context URL panel + token table + Query Console
 
+      account/
+        page.tsx                     ← profile: username, email, phone, avatar
+        sessions/page.tsx            ← active sessions list with revoke
+
+      orgs/
+        new/page.tsx                 ← create organization
+        [orgSlug]/
+          settings/page.tsx          ← org name, slug
+          members/page.tsx           ← member list, invite, roles
+          audit-log/page.tsx         ← org audit log
+
       settings/
-        ai-keys/page.tsx             ← add/remove OpenAI, Anthropic, Google keys
-        team/page.tsx                ← Clerk OrganizationSwitcher + member list
+        ai-keys/page.tsx             ← add/remove OpenAI, Anthropic, Google, xAI keys
         billing/page.tsx             ← "Pro features coming soon" stub
 
     not-found.tsx                    ← custom 404
@@ -67,7 +76,7 @@ apps/cloud/
 
 **`[[...repo]]` catch-all:** GitHub repos are `owner/repo`. A single `[repo]` dynamic segment cannot capture a slash. The catch-all handles `cloud.zagforge.com/repos/zagforge/zigzag` naturally and is future-proof for monorepo sub-paths.
 
-**URL convention:** `cloud.zagforge.com/repos/{clerk-org-slug}/{repo-name}` — the first segment is the Clerk org slug (not the GitHub owner name, which may differ). The frontend resolves the Clerk org slug from the active session.
+**URL convention:** `cloud.zagforge.com/repos/{owner}/{repo-name}` — the first segment is either the username (personal workspace) or the org slug (org workspace). The frontend resolves this from the active workspace context.
 
 ---
 
@@ -76,10 +85,8 @@ apps/cloud/
 ```
 features/
   auth/components/
-    sign-in-form.tsx
-    sign-up-form.tsx
-    forgot-password-form.tsx
-    verify-form.tsx
+    auth-callback.tsx              ← handles OIDC redirect callback
+    username-prompt.tsx            ← shown on first SSO login when username not set
 
   repos/components/
     repo-card.tsx
@@ -99,6 +106,18 @@ features/
     message-bubble.tsx
     sse-stream-hook.ts
 
+  account/components/
+    profile-form.tsx               ← edit username, email, phone
+    session-list.tsx               ← active sessions with revoke buttons
+    delete-account-dialog.tsx
+
+  orgs/components/
+    org-create-form.tsx
+    member-table.tsx
+    invite-dialog.tsx
+    role-selector.tsx
+    audit-log-table.tsx
+
   settings/components/
     ai-key-form.tsx
     key-hint-row.tsx
@@ -107,30 +126,26 @@ features/
 
 ---
 
-## Auth: Clerk Headless
+## Auth: Zitadel OIDC
 
-All auth pages use Clerk's React hooks directly — **no Clerk-branded UI components**. Forms are standard HTML/React styled with Tailwind and `@workspace/ui` primitives.
+All auth flows use standard OIDC with Zitadel as the provider. Two approaches depending on the desired UX:
 
-```tsx
-// features/auth/components/sign-in-form.tsx
-import { useSignIn } from '@clerk/nextjs'
+**Option A: Zitadel hosted login (recommended for launch)**
+- Redirect to `auth.zagforge.com` for login/signup — Zitadel renders the login page (custom branded via Zitadel's branding settings)
+- After auth, redirect back to `cloud.zagforge.com` with authorization code
+- Next.js exchanges code for tokens via PKCE
+- Simplest to implement, handles all edge cases (MFA, account linking, password reset)
 
-export function SignInForm() {
-  const { signIn, isLoaded } = useSignIn()
+**Option B: Custom login pages (future)**
+- Build fully custom sign-in/sign-up forms in Next.js
+- Use Zitadel's session API to authenticate directly
+- Full UI control, more implementation effort
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const { identifier, password } = Object.fromEntries(new FormData(e.currentTarget))
-    await signIn.create({ identifier: String(identifier), password: String(password) })
-  }
+**Auth library:** `oidc-client-ts` (lightweight, framework-agnostic) or `next-auth` v5 with Zitadel OIDC provider.
 
-  // ...standard form with Input, Button from @workspace/ui
-}
-```
+**Middleware:** `middleware.ts` checks for a valid session token on all `(dashboard)` routes. If missing or expired, redirects to the Zitadel login flow. Auth routes in `(auth)` are public.
 
-The Go API is unchanged — it still validates `Authorization: Bearer <Clerk JWT>` on every authenticated request.
-
-**Clerk Middleware:** `clerkMiddleware()` in `apps/cloud/middleware.ts` protects all `(dashboard)` routes. Auth routes in `(auth)` are public.
+The Go API validates `Authorization: Bearer <Zitadel JWT>` on every authenticated request via JWKS-based local verification.
 
 ---
 
@@ -204,14 +219,19 @@ TanStack Query is used for the initial data fetches (repo list, snapshot list, t
 
 ---
 
-## Multi-Tenancy: Orgs Now, Billing Later
+## Workspace Switcher & Multi-Tenancy
 
-Clerk Organizations are enabled in Phase 5. The data model already has `org_id` on all relevant tables.
+The sidebar includes a workspace switcher that shows:
 
-- **Org switcher:** `<OrganizationSwitcher />` (Clerk component) in the sidebar layout
-- **Invite flow:** Clerk's built-in invite UI — emails are sent by Clerk, no custom invite endpoint needed
-- **Billing tab:** renders `billing-stub.tsx` — "Pro features coming soon. Contact us for early access." Collects lead emails passively.
-- **RBAC:** Clerk org roles (admin/member) are respected in Phase 5; fine-grained per-repo RBAC is a future phase.
+1. **Personal** (default) — the user's personal workspace, always present
+2. **Organizations** — any orgs the user has created or been invited to (zero or more)
+
+Switching workspace changes the active scope for all API requests (personal `user_id` vs. org `org_id`). The active scope is persisted in a cookie or local storage so it survives page reloads.
+
+- **Org creation:** Custom form → `POST /api/v1/orgs` → creates in Zitadel + local DB
+- **Invite flow:** Org admin invites via email → Go API sends invite email → invitee accepts → membership created
+- **RBAC:** Roles (owner/admin/member) stored in `memberships` table, enforced by Go API middleware. Fine-grained per-repo RBAC is a future phase.
+- **Billing tab:** renders `billing-stub.tsx` — "Pro features coming soon. Contact us for early access."
 
 ---
 

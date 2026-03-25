@@ -1,6 +1,6 @@
 # Zagforge — API Endpoints [Phase 2]
 
-## Public API (Clerk API key auth)
+## Public API (Zitadel OIDC JWT auth)
 
 `{org}` is the organization `slug`. `{repo}` is the repo `full_name` suffix (e.g., for "LegationPro/zigzag", the repo param is "zigzag").
 
@@ -37,9 +37,9 @@
 ```
 POST /api/v1/upload
 Auth: Zagforge CLI token (Authorization: Bearer zf_pk_<token>)
-      Verified by CLI token middleware — distinct from the Clerk JWT session middleware.
+      Verified by CLI token middleware — distinct from the Zitadel OIDC JWT session middleware.
 Body: {
-  org_slug: string,           // Clerk org slug
+  org_slug: string,           // Organization slug
   repo_full_name: string,     // "github-owner/repo-name"
   commit_sha: string,
   branch: string,
@@ -91,11 +91,11 @@ GET /v1/context/{raw_token}?format=markdown|json
 
 ```
 POST /api/v1/{org}/{repo}/query
-Auth: Clerk JWT
+Auth: Zitadel OIDC JWT
 Body: { question: string, snapshot_id?: uuid }
 Response: text/event-stream (SSE)
 
-{org} = Clerk org slug, {repo} = repository full_name suffix (e.g. "zigzag")
+{org} = organization slug, {repo} = repository full_name suffix (e.g. "zigzag")
 
 Backend logic:
   1. Load snapshot (snapshot_id or latest)

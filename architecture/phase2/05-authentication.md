@@ -1,5 +1,79 @@
 # Zagforge — Authentication & Security [Phase 2]
 
+## Identity Provider: Zitadel
+
+Zagforge uses a self-hosted [Zitadel](https://zitadel.com) instance as the identity provider, deployed as a standalone Cloud Run container (`auth.zagforge.com`). Zitadel handles:
+
+- User registration (email/password with verification)
+- SSO login (Google, GitHub via OIDC)
+- Password reset flow
+- Email verification
+- JWT issuance (OIDC-compliant)
+- Session lifecycle
+- MFA (future)
+
+The Go API does **not** implement any authentication logic. It validates Zitadel-issued JWTs via JWKS (local verification, no per-request call to Zitadel) and manages application-level concerns: user/org sync, org CRUD, session display, audit logging.
+
+### JWT Verification
+
+The `Auth()` middleware fetches Zitadel's JWKS from `{ZITADEL_ISSUER_URL}/.well-known/jwks.json` at startup (with periodic refresh) and validates JWTs locally:
+
+1. Extract `Authorization: Bearer <token>` from request header
+2. Verify signature against cached JWKS
+3. Validate `iss`, `aud` (project ID), and `exp` claims
+4. Extract `sub` (Zitadel user ID) and org claims
+5. Store parsed claims in request context
+
+### Scope Resolution
+
+Every authenticated request targets either a **personal workspace** or an **organization**:
+
+- Personal: derived from the JWT `sub` claim → `user_id`
+- Organization: derived from a path parameter or header (e.g. `X-Org-ID`) → looked up via `zitadel_org_id` → `org_id`
+
+The `Scope()` middleware (replaces the old `OrgScope()`) resolves this and stores the active `user_id` and optional `org_id` in the request context. All downstream queries filter by the resolved scope.
+
+### Zitadel Webhooks
+
+Zitadel sends event webhooks to `POST /internal/webhooks/zitadel` for:
+
+- `user.created` → upsert into `users` table
+- `user.updated` → update `users` table (username, email, avatar changes)
+- `user.deleted` → cascade delete user and owned resources
+- `org.created` / `org.updated` → upsert into `organizations` table
+- `org.member.added` / `org.member.removed` → update `memberships` table
+- `session.created` / `session.terminated` → update `sessions` table
+
+Webhook requests are verified via Zitadel's signing key (configured in Zitadel Action settings).
+
+### Account Management Endpoints
+
+These live in the Go API and proxy to Zitadel's Management API where needed:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/account` | Get current user profile (from local DB) |
+| `PATCH` | `/api/v1/account` | Update username, email, phone → calls Zitadel Management API + updates local DB |
+| `DELETE` | `/api/v1/account` | Delete account → calls Zitadel Management API + cascade delete in local DB |
+| `GET` | `/api/v1/account/sessions` | List active sessions (from local DB) |
+| `DELETE` | `/api/v1/account/sessions/{id}` | Revoke session → calls Zitadel API + deletes from local DB |
+
+### Organization Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/orgs` | Create organization → creates in Zitadel + local DB |
+| `GET` | `/api/v1/orgs` | List user's organizations (from memberships table) |
+| `PATCH` | `/api/v1/orgs/{orgID}` | Update org name/slug (owner/admin only) |
+| `DELETE` | `/api/v1/orgs/{orgID}` | Delete organization (owner only) |
+| `GET` | `/api/v1/orgs/{orgID}/members` | List org members |
+| `POST` | `/api/v1/orgs/{orgID}/members` | Invite member (sends invite via email) |
+| `PATCH` | `/api/v1/orgs/{orgID}/members/{userID}` | Change member role |
+| `DELETE` | `/api/v1/orgs/{orgID}/members/{userID}` | Remove member |
+| `GET` | `/api/v1/orgs/{orgID}/audit-log` | View org audit log (owner/admin only) |
+
+---
+
 ## Internal Endpoint Authentication
 
 All `/internal/*` endpoints are protected. Each uses the appropriate auth mechanism:
@@ -7,6 +81,7 @@ All `/internal/*` endpoints are protected. Each uses the appropriate auth mechan
 | Endpoint | Auth mechanism |
 |---|---|
 | `POST /internal/webhooks/github` | GitHub App webhook secret (HMAC-SHA256 via `X-Hub-Signature-256` header) |
+| `POST /internal/webhooks/zitadel` | Zitadel webhook signing key |
 | `POST /internal/jobs/start` | Signed job token (HMAC, same as complete) |
 | `POST /internal/jobs/complete` | Signed job token (HMAC) |
 | `POST /internal/watchdog/timeout` | GCP OIDC token (Cloud Scheduler service account) |
@@ -152,8 +227,9 @@ type GitHubConfig struct {
 }
 
 type AuthConfig struct {
-    HMACSigningKey string `env:"HMAC_SIGNING_KEY,required"`
-    ClerkSecretKey string `env:"CLERK_SECRET_KEY,required"`
+    HMACSigningKey   string `env:"HMAC_SIGNING_KEY,required"`
+    ZitadelIssuerURL string `env:"ZITADEL_ISSUER_URL,required"` // e.g. "https://auth.zagforge.com"
+    ZitadelProjectID string `env:"ZITADEL_PROJECT_ID,required"`
 }
 ```
 
@@ -167,13 +243,11 @@ type AuthConfig struct {
 
 ### CLI Token Authentication
 
-`POST /api/v1/upload` uses a separate auth mechanism from Clerk session JWTs. CLI tokens are long-lived API keys issued by Zagforge, formatted as `zf_pk_<random>`.
+`POST /api/v1/upload` uses a separate auth mechanism from Zitadel OIDC session JWTs. CLI tokens are long-lived API keys issued by Zagforge, formatted as `zf_pk_<random>`.
 
-The Go API uses a distinct middleware for this endpoint — it does **not** go through `clerkjwt.Verify()`. Options for implementation:
-- Custom `api_keys` table (token stored hashed, org-scoped)
-- Clerk machine tokens (if Clerk's machine-to-machine offering is adopted)
+The Go API uses a distinct middleware for this endpoint — it does **not** go through OIDC JWT verification. Implementation uses a DB-backed `cli_api_keys` table (token stored hashed, scoped to a user or org).
 
-Either way: the middleware resolves the token to an `org_id` and enforces that the upload targets that org only.
+The middleware resolves the token to a `user_id` or `org_id` and enforces that the upload targets that scope only.
 
 ### Context Token Authentication
 
