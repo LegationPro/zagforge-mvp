@@ -18,9 +18,9 @@ Replace the global static key with per-org CLI credentials. Each org gets its ow
 
 | Approach | Complexity | Security | UX |
 |---|---|---|---|
-| **A: DB-backed API keys** (recommended) | Medium | Strong — revocable, per-org, auditable | Org admin generates key in dashboard |
+| **A: DB-backed API keys** (recommended) | Medium | Strong — revocable, per-user/org, auditable | User or org admin generates key in dashboard |
 | B: HMAC-signed org tokens | Low | Good — encodes org_id, verifiable without DB | No revocation without key rotation |
-| C: Clerk JWT from CLI | Low | Strong — leverages existing auth | Requires browser OAuth flow from CLI |
+| C: Zitadel OIDC from CLI | Low | Strong — leverages existing auth | Requires browser OAuth flow from CLI |
 
 ### Recommended: Option A
 
@@ -28,21 +28,26 @@ Replace the global static key with per-org CLI credentials. Each org gets its ow
 ```sql
 CREATE TABLE cli_api_keys (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id    UUID REFERENCES users(id) ON DELETE CASCADE,
+    org_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
     key_hash   TEXT UNIQUE NOT NULL,
     key_hint   TEXT NOT NULL,
     label      TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (
+        (user_id IS NOT NULL AND org_id IS NULL) OR
+        (user_id IS NULL AND org_id IS NOT NULL)
+    )
 );
 ```
 
 **Flow:**
-1. Org admin generates a CLI key in dashboard → `POST /api/v1/orgs/settings/cli-keys`
+1. User or org admin generates a CLI key in dashboard → `POST /api/v1/settings/cli-keys` (personal) or `POST /api/v1/orgs/{orgID}/settings/cli-keys` (org)
 2. Raw key returned once (e.g., `zf_cli_<base64>`)
 3. Key hash stored in DB (SHA-256, same pattern as context tokens)
 4. CLI sends `Authorization: Bearer zf_cli_<base64>` on upload
-5. Middleware hashes the key, looks up in DB, extracts `org_id`
-6. Upload handler verifies `org_id` matches `org_slug` in request body
+5. Middleware hashes the key, looks up in DB, extracts `user_id` or `org_id`
+6. Upload handler verifies the resolved scope matches the target in the request body
 
 **Migration path:**
 - Keep `CLI_API_KEY` env var as a fallback during transition

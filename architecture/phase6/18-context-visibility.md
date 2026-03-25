@@ -114,12 +114,12 @@ GET /v1/context/{token}
   ├─ Check expiration
   ├─ If visibility == "public" → proceed (current behavior)
   ├─ If visibility == "private"
-  │   ├─ Require Clerk JWT
-  │   ├─ Resolve org from claims
-  │   └─ Verify org == token.org_id → proceed or 403
+  │   ├─ Require Zitadel JWT
+  │   ├─ If token.user_id is set → verify JWT sub == token owner
+  │   └─ If token.org_id is set → verify user is org member → proceed or 403
   └─ If visibility == "protected"
-      ├─ Require Clerk JWT
-      ├─ Extract zitadel_user_id from claims
+      ├─ Require Zitadel JWT
+      ├─ Extract zitadel_user_id from JWT sub claim
       └─ Query context_token_allowed_users → proceed or 403
 ```
 
