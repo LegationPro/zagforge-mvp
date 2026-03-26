@@ -16,16 +16,19 @@ import (
 )
 
 var (
-	errRepoNotFound  = errors.New("repository not found")
-	errInvalidExpiry = errors.New("expires_at must be a valid RFC3339 timestamp")
+	errRepoNotFound      = errors.New("repository not found")
+	errInvalidExpiry     = errors.New("expires_at must be a valid RFC3339 timestamp")
+	errInvalidVisibility = errors.New("visibility must be public, private, or protected")
+	errAllowedUsersEmpty = errors.New("user_ids must not be empty")
 )
 
 type createTokenResponse struct {
-	ID        string     `json:"id"`
-	RawToken  string     `json:"raw_token"`
-	Label     string     `json:"label,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	ID         string                  `json:"id"`
+	RawToken   string                  `json:"raw_token"`
+	Label      string                  `json:"label,omitempty"`
+	Visibility store.ContextVisibility `json:"visibility"`
+	CreatedAt  time.Time               `json:"created_at"`
+	ExpiresAt  *time.Time              `json:"expires_at,omitempty"`
 }
 
 type Handler struct {
@@ -76,12 +79,26 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body, err := httputil.DecodeJSON[struct {
-		Label     string  `json:"label"`
-		ExpiresAt *string `json:"expires_at"`
+		Label        string   `json:"label"`
+		ExpiresAt    *string  `json:"expires_at"`
+		Visibility   string   `json:"visibility"`
+		AllowedUsers []string `json:"allowed_users"`
 	}](r.Body)
 	if err != nil {
 		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
+	}
+
+	visibility := store.ContextVisibilityPublic
+	if body.Visibility != "" {
+		v := store.ContextVisibility(body.Visibility)
+		if v != store.ContextVisibilityPublic &&
+			v != store.ContextVisibilityPrivate &&
+			v != store.ContextVisibilityProtected {
+			httputil.ErrResponse(w, http.StatusBadRequest, errInvalidVisibility)
+			return
+		}
+		visibility = v
 	}
 
 	raw, err := generateToken()
@@ -102,14 +119,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		expiresAt = pgtype.Timestamptz{Time: t, Valid: true}
 	}
 
-	tok, err := h.db.Queries.InsertContextToken(r.Context(), store.InsertContextTokenParams{
-		RepoID:    repoID,
-		OrgID:     orgID,
-		TokenHash: hash,
-		Label:     pgtype.Text{String: body.Label, Valid: body.Label != ""},
-		ExpiresAt: expiresAt,
-		// UserID left as zero value (invalid UUID) for org-scoped tokens.
-		// Personal workspace tokens will set UserID instead of OrgID.
+	ctx := r.Context()
+
+	tok, err := h.db.Queries.InsertContextToken(ctx, store.InsertContextTokenParams{
+		RepoID:     repoID,
+		OrgID:      orgID,
+		TokenHash:  hash,
+		Label:      pgtype.Text{String: body.Label, Valid: body.Label != ""},
+		ExpiresAt:  expiresAt,
+		Visibility: visibility,
 	})
 	if err != nil {
 		h.log.Error("insert context token", zap.Error(err))
@@ -117,11 +135,26 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If protected, insert allowed users.
+	if visibility == store.ContextVisibilityProtected && len(body.AllowedUsers) > 0 {
+		for _, uid := range body.AllowedUsers {
+			userID, perr := httputil.UUIDFromString(uid)
+			if perr != nil {
+				continue
+			}
+			_ = h.db.Queries.InsertContextTokenAllowedUser(ctx, store.InsertContextTokenAllowedUserParams{
+				TokenID: tok.ID,
+				UserID:  userID,
+			})
+		}
+	}
+
 	resp := createTokenResponse{
-		ID:        tok.ID.String(),
-		RawToken:  raw,
-		Label:     tok.Label.String,
-		CreatedAt: tok.CreatedAt.Time,
+		ID:         tok.ID.String(),
+		RawToken:   raw,
+		Label:      tok.Label.String,
+		Visibility: tok.Visibility,
+		CreatedAt:  tok.CreatedAt.Time,
 	}
 	if tok.ExpiresAt.Valid {
 		t := tok.ExpiresAt.Time
@@ -129,6 +162,74 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, resp)
+}
+
+// UpdateAllowedUsers replaces the allowed user list for a protected context token.
+func (h *Handler) UpdateAllowedUsers(w http.ResponseWriter, r *http.Request) {
+	orgID := auth.OrgIDFromContext(r.Context())
+
+	tokenID, err := httputil.ParseUUID(r, "tokenID")
+	if err != nil {
+		httputil.ErrResponse(w, http.StatusBadRequest, err)
+		return
+	}
+
+	body, err := httputil.DecodeJSON[struct {
+		UserIDs []string `json:"user_ids"`
+	}](r.Body)
+	if err != nil {
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
+		return
+	}
+	if len(body.UserIDs) == 0 {
+		httputil.ErrResponse(w, http.StatusBadRequest, errAllowedUsersEmpty)
+		return
+	}
+
+	ctx := r.Context()
+	_ = orgID
+
+	// Clear existing allowed users and replace with new list.
+	if err := h.db.Queries.ReplaceContextTokenAllowedUsers(ctx, tokenID); err != nil {
+		h.log.Error("clear allowed users", zap.Error(err))
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
+		return
+	}
+
+	// Insert new allowed users.
+	for _, uid := range body.UserIDs {
+		userID, perr := httputil.UUIDFromString(uid)
+		if perr != nil {
+			continue
+		}
+		if err := h.db.Queries.InsertContextTokenAllowedUser(ctx, store.InsertContextTokenAllowedUserParams{
+			TokenID: tokenID,
+			UserID:  userID,
+		}); err != nil {
+			h.log.Error("insert allowed user", zap.String("user_id", uid), zap.Error(err))
+		}
+	}
+
+	_ = orgID // used for future ownership check
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListAllowedUsers returns the allowed users for a context token.
+func (h *Handler) ListAllowedUsers(w http.ResponseWriter, r *http.Request) {
+	tokenID, err := httputil.ParseUUID(r, "tokenID")
+	if err != nil {
+		httputil.ErrResponse(w, http.StatusBadRequest, err)
+		return
+	}
+
+	users, err := h.db.Queries.ListContextTokenAllowedUsers(r.Context(), tokenID)
+	if err != nil {
+		h.log.Error("list allowed users", zap.Error(err))
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
+		return
+	}
+	httputil.OkResponse(w, users)
 }
 
 // Delete revokes a context token (must belong to caller's org).

@@ -33,7 +33,7 @@ func newRouteDeps(d *deps, c *config.Config, log *zap.Logger) *routes.Deps {
 		Watchdog:   watchdog.NewHandler(d.database, log),
 		GithubAuth: githubauth.NewHandler(d.database, c.App.GithubAppSlug, log),
 		Upload:     uploadhandler.NewHandler(d.database, d.gcsClient, log),
-		ContextURL: contexturlhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, log),
+		ContextURL: contexturlhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, log, d.jwtPubKey, c.App.JWTIssuer),
 		CtxTokens:  contexttokenshandler.NewHandler(d.database, log),
 		AIKeys:     aikeyshandler.NewHandler(d.database, d.encSvc, log),
 		CLIKeys:    clikeyshandler.NewHandler(d.database, log),

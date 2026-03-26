@@ -5,10 +5,55 @@
 package store
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type ContextVisibility string
+
+const (
+	ContextVisibilityPublic    ContextVisibility = "public"
+	ContextVisibilityPrivate   ContextVisibility = "private"
+	ContextVisibilityProtected ContextVisibility = "protected"
+)
+
+func (e *ContextVisibility) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ContextVisibility(s)
+	case string:
+		*e = ContextVisibility(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ContextVisibility: %T", src)
+	}
+	return nil
+}
+
+type NullContextVisibility struct {
+	ContextVisibility ContextVisibility
+	Valid             bool // Valid is true if ContextVisibility is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullContextVisibility) Scan(value interface{}) error {
+	if value == nil {
+		ns.ContextVisibility, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ContextVisibility.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullContextVisibility) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ContextVisibility), nil
+}
 
 type AiProviderKey struct {
 	ID        pgtype.UUID
@@ -52,6 +97,14 @@ type ContextToken struct {
 	ExpiresAt        pgtype.Timestamptz
 	CreatedAt        pgtype.Timestamptz
 	UserID           pgtype.UUID
+	Visibility       ContextVisibility
+}
+
+type ContextTokenAllowedUser struct {
+	ID        pgtype.UUID
+	TokenID   pgtype.UUID
+	UserID    pgtype.UUID
+	CreatedAt pgtype.Timestamptz
 }
 
 type Job struct {

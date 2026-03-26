@@ -49,7 +49,7 @@ func withChiParam(r *http.Request, key, value string) *http.Request {
 }
 
 func TestHead_NilDB_Returns404(t *testing.T) {
-	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop())
+	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop(), nil, "")
 	req := httptest.NewRequest(http.MethodHead, "/v1/context/sometoken", nil)
 	req = withChiParam(req, "token", "sometoken")
 	w := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestHead_NilDB_Returns404(t *testing.T) {
 }
 
 func TestGet_NilDB_Returns404(t *testing.T) {
-	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop())
+	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop(), nil, "")
 	req := httptest.NewRequest(http.MethodGet, "/v1/context/sometoken", nil)
 	req = withChiParam(req, "token", "sometoken")
 	w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestGet_NilDB_Returns404(t *testing.T) {
 }
 
 func TestHead_EmptyToken_Returns404(t *testing.T) {
-	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop())
+	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop(), nil, "")
 	req := httptest.NewRequest(http.MethodHead, "/v1/context/", nil)
 	req = withChiParam(req, "token", "")
 	w := httptest.NewRecorder()
@@ -92,7 +92,7 @@ func TestHead_EmptyToken_Returns404(t *testing.T) {
 }
 
 func TestGet_EmptyToken_Returns404(t *testing.T) {
-	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop())
+	h := NewHandler(nil, contextcache.NewInMemory(), nil, nil, zap.NewNop(), nil, "")
 	req := httptest.NewRequest(http.MethodGet, "/v1/context/", nil)
 	req = withChiParam(req, "token", "")
 	w := httptest.NewRecorder()
