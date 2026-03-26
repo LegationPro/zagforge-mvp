@@ -1,5 +1,5 @@
 environment          = "dev"
-github_repo          = "LegationPro/zagforge-mvp"
+github_repo          = "LegationPro/zagforge-cloud"
 project_id           = "zagforge"
 region               = "us-central1"
 database_provider    = "neon"
