@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/LegationPro/zagforge/auth/internal/handler"
+	"github.com/LegationPro/zagforge/auth/internal/role"
 	"github.com/LegationPro/zagforge/auth/internal/service/audit"
 	authstore "github.com/LegationPro/zagforge/auth/internal/store"
 	"github.com/LegationPro/zagforge/auth/internal/validate"
@@ -242,7 +243,7 @@ func (h *Handler) requireOrgAdminOrOwner(r *http.Request, orgID, userID pgtype.U
 	if err != nil {
 		return errForbidden
 	}
-	if !slices.Contains([]string{"owner", "admin"}, membership.Role) {
+	if !slices.Contains(role.OrgAdminOrAbove, membership.Role) {
 		return errForbidden
 	}
 	return nil

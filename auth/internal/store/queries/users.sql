@@ -32,3 +32,17 @@ UPDATE users SET onboarding_step = $2 WHERE id = $1;
 
 -- name: UpdateUserPhone :exec
 UPDATE users SET phone_cipher = $2 WHERE id = $1;
+
+-- name: ListUsers :many
+SELECT * FROM users
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountUsers :one
+SELECT count(*) FROM users;
+
+-- name: UpdateUserPlatformAdmin :exec
+UPDATE users SET is_platform_admin = $2 WHERE id = $1;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;

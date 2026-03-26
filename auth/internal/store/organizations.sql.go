@@ -22,6 +22,17 @@ func (q *Queries) CountOrgMembers(ctx context.Context, orgID pgtype.UUID) (int64
 	return count, err
 }
 
+const countOrganizations = `-- name: CountOrganizations :one
+SELECT count(*) FROM organizations
+`
+
+func (q *Queries) CountOrganizations(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizations)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrgMembership = `-- name: CreateOrgMembership :one
 INSERT INTO org_memberships (org_id, user_id, role)
 VALUES ($1, $2, $3)
@@ -217,6 +228,47 @@ func (q *Queries) ListOrgMembers(ctx context.Context, orgID pgtype.UUID) ([]List
 	return items, nil
 }
 
+const listOrganizations = `-- name: ListOrganizations :many
+SELECT id, slug, name, logo_url, plan, billing_email, max_members, created_at, updated_at FROM organizations
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListOrganizationsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error) {
+	rows, err := q.db.Query(ctx, listOrganizations, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Organization
+	for rows.Next() {
+		var i Organization
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.LogoUrl,
+			&i.Plan,
+			&i.BillingEmail,
+			&i.MaxMembers,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserOrganizations = `-- name: ListUserOrganizations :many
 SELECT o.id, o.slug, o.name, o.logo_url, o.plan, o.billing_email, o.max_members, o.created_at, o.updated_at FROM organizations o
 JOIN org_memberships om ON o.id = om.org_id
@@ -291,6 +343,36 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		arg.LogoUrl,
 		arg.BillingEmail,
 	)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.LogoUrl,
+		&i.Plan,
+		&i.BillingEmail,
+		&i.MaxMembers,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateOrganizationPlan = `-- name: UpdateOrganizationPlan :one
+UPDATE organizations
+SET plan = $2, max_members = $3
+WHERE id = $1
+RETURNING id, slug, name, logo_url, plan, billing_email, max_members, created_at, updated_at
+`
+
+type UpdateOrganizationPlanParams struct {
+	ID         pgtype.UUID
+	Plan       string
+	MaxMembers int32
+}
+
+func (q *Queries) UpdateOrganizationPlan(ctx context.Context, arg UpdateOrganizationPlanParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, updateOrganizationPlan, arg.ID, arg.Plan, arg.MaxMembers)
 	var i Organization
 	err := row.Scan(
 		&i.ID,

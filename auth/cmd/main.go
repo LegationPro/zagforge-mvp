@@ -15,6 +15,7 @@ import (
 
 	"github.com/LegationPro/zagforge/auth/internal/config"
 	"github.com/LegationPro/zagforge/auth/internal/db"
+	adminhandler "github.com/LegationPro/zagforge/auth/internal/handler/admin"
 	audithandler "github.com/LegationPro/zagforge/auth/internal/handler/audit"
 	"github.com/LegationPro/zagforge/auth/internal/handler/health"
 	invitehandler "github.com/LegationPro/zagforge/auth/internal/handler/invite"
@@ -24,6 +25,7 @@ import (
 	sessionhandler "github.com/LegationPro/zagforge/auth/internal/handler/session"
 	teamhandler "github.com/LegationPro/zagforge/auth/internal/handler/team"
 	userhandler "github.com/LegationPro/zagforge/auth/internal/handler/user"
+	webhookhandler "github.com/LegationPro/zagforge/auth/internal/handler/webhook"
 	authmw "github.com/LegationPro/zagforge/auth/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/auth/internal/service/audit"
 	"github.com/LegationPro/zagforge/auth/internal/service/encryption"
@@ -114,6 +116,8 @@ func run() error {
 	mfaH := mfahandler.NewHandler(database, tokenSvc, sessionSvc, encSvc, auditSvc, log)
 	teamH := teamhandler.NewHandler(database, auditSvc, log)
 	auditH := audithandler.NewHandler(database, log)
+	webhookH := webhookhandler.NewHandler(database, log)
+	adminH := adminhandler.NewHandler(database, log)
 
 	// Parse public key for auth middleware.
 	pubKey := tokenSvc.PublicKey()
@@ -219,6 +223,20 @@ func run() error {
 		{Method: router.GET, Path: "/auth/orgs/{orgID}/audit-logs", Handler: auditH.List},
 		{Method: router.GET, Path: "/auth/orgs/{orgID}/metrics/logins", Handler: auditH.LoginMetrics},
 		{Method: router.GET, Path: "/auth/orgs/{orgID}/metrics/failed-logins", Handler: auditH.FailedLoginMetrics},
+
+		// Webhooks.
+		{Method: router.POST, Path: "/auth/orgs/{orgID}/webhooks", Handler: webhookH.Create},
+		{Method: router.GET, Path: "/auth/orgs/{orgID}/webhooks", Handler: webhookH.List},
+		{Method: router.PUT, Path: "/auth/orgs/{orgID}/webhooks/{whID}", Handler: webhookH.Update},
+		{Method: router.DELETE, Path: "/auth/orgs/{orgID}/webhooks/{whID}", Handler: webhookH.Delete},
+		{Method: router.GET, Path: "/auth/orgs/{orgID}/webhooks/{whID}/deliveries", Handler: webhookH.ListDeliveries},
+
+		// Admin (platform admin only).
+		{Method: router.GET, Path: "/auth/admin/users", Handler: adminH.ListUsers},
+		{Method: router.GET, Path: "/auth/admin/users/{userID}", Handler: adminH.GetUser},
+		{Method: router.PUT, Path: "/auth/admin/users/{userID}", Handler: adminH.UpdateUser},
+		{Method: router.GET, Path: "/auth/admin/orgs", Handler: adminH.ListOrgs},
+		{Method: router.PUT, Path: "/auth/admin/orgs/{orgID}", Handler: adminH.UpdateOrgPlan},
 	}); err != nil {
 		return fmt.Errorf("register authenticated routes: %w", err)
 	}

@@ -49,3 +49,17 @@ DELETE FROM org_memberships WHERE org_id = $1 AND user_id = $2;
 
 -- name: CountOrgMembers :one
 SELECT count(*) FROM org_memberships WHERE org_id = $1;
+
+-- name: ListOrganizations :many
+SELECT * FROM organizations
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountOrganizations :one
+SELECT count(*) FROM organizations;
+
+-- name: UpdateOrganizationPlan :one
+UPDATE organizations
+SET plan = $2, max_members = $3
+WHERE id = $1
+RETURNING *;
