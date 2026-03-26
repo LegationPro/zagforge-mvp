@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -30,7 +32,6 @@ import (
 	uploadhandler "github.com/LegationPro/zagforge/api/internal/handler/upload"
 	"github.com/LegationPro/zagforge/api/internal/handler/watchdog"
 	"github.com/LegationPro/zagforge/api/internal/handler/webhook"
-	zitadelwh "github.com/LegationPro/zagforge/api/internal/handler/zitadelwebhook"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/api/internal/middleware/bodylimit"
 	"github.com/LegationPro/zagforge/api/internal/middleware/clitoken"
@@ -41,7 +42,6 @@ import (
 	"github.com/LegationPro/zagforge/api/internal/middleware/watchdogauth"
 	"github.com/LegationPro/zagforge/api/internal/service"
 	"github.com/LegationPro/zagforge/api/internal/service/encryption"
-	"github.com/LegationPro/zagforge/api/internal/zitadel"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 	"github.com/LegationPro/zagforge/shared/go/logger"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
@@ -50,17 +50,20 @@ import (
 )
 
 func run() error {
+	// Load env config
 	c, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	// Load zap logger
 	log, err := logger.New(os.Getenv("APP_ENV"))
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
 	defer func() { _ = log.Sync() }()
 
+	// Initialize database
 	pool, err := db.Connect(context.Background(), c.DB.URL)
 	if err != nil {
 		return fmt.Errorf("connect to db: %w", err)
@@ -69,7 +72,7 @@ func run() error {
 
 	database := db.New(pool)
 
-	// Redis for rate limiting.
+	// Initialize Redis for rate limiting.
 	redisOpts, err := redis.ParseURL(c.Redis.URL)
 	if err != nil {
 		return fmt.Errorf("parse redis url: %w", err)
@@ -84,6 +87,7 @@ func run() error {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
 
+	// Initialize github client provider
 	client, err := githubprovider.NewAPIClient(c.App.GithubAppID, []byte(c.App.GithubAppPrivateKey), c.App.GithubAppWebhookSecret)
 	if err != nil {
 		return fmt.Errorf("create API client: %w", err)
@@ -92,6 +96,20 @@ func run() error {
 	ch, err := githubprovider.NewClientHandler(client, log)
 	if err != nil {
 		return fmt.Errorf("create client handler: %w", err)
+	}
+
+	// Parse Ed25519 public key for JWT verification.
+	pubKeyPEM, err := base64.StdEncoding.DecodeString(c.App.JWTPublicKeyBase64)
+	if err != nil {
+		return fmt.Errorf("decode jwt public key: %w", err)
+	}
+	pubKeyRaw, err := jwt.ParseEdPublicKeyFromPEM(pubKeyPEM)
+	if err != nil {
+		return fmt.Errorf("parse jwt public key: %w", err)
+	}
+	jwtPubKey, ok := pubKeyRaw.(ed25519.PublicKey)
+	if !ok {
+		return fmt.Errorf("jwt public key is not Ed25519")
 	}
 
 	signer := jobtoken.NewSigner([]byte(c.App.HMACSigningKey), 30*time.Minute)
@@ -160,11 +178,9 @@ func run() error {
 	aiKeysH := aikeyshandler.NewHandler(database, encSvc, log)
 	queryH := queryhandler.NewHandler(database, ctxCache, ch, gcsClient, encSvc, log)
 
-	// Auth migration handlers.
-	zitadelClient := zitadel.NewClient(c.App.ZitadelIssuerURL, c.App.ZitadelServiceUserToken)
-	accountH := accounthandler.NewHandler(database, zitadelClient, log)
+	// Account & org management handlers.
+	accountH := accounthandler.NewHandler(database, log)
 	orgH := orghandler.NewHandler(database, log)
-	zitadelWhH := zitadelwh.NewHandler(database, c.App.ZitadelWebhookSecret, log)
 
 	r := router.New()
 
@@ -200,7 +216,6 @@ func run() error {
 	}, "webhook", log))
 	if err := internal.Create([]router.Subroute{
 		{Method: router.POST, Path: "/internal/webhooks/github", Handler: wh.ServeHTTP},
-		{Method: router.POST, Path: "/internal/webhooks/zitadel", Handler: zitadelWhH.ServeHTTP},
 	}); err != nil {
 		return fmt.Errorf("register internal routes: %w", err)
 	}
@@ -227,18 +242,10 @@ func run() error {
 	}
 
 	// API v1 — restricted CORS + auth + scope resolution + rate limit.
-	authMiddleware, err := auth.Auth(auth.JWKSConfig{
-		IssuerURL: c.App.ZitadelIssuerURL,
-		ProjectID: c.App.ZitadelProjectID,
-	}, log)
-	if err != nil {
-		return fmt.Errorf("init auth middleware: %w", err)
-	}
-
 	v1 := r.Group()
 	v1.Use(corsmw.Cors(c.CORS.AllowedOrigins))
-	v1.Use(authMiddleware)
-	v1.Use(auth.Scope(database.Queries, log))
+	v1.Use(auth.Auth(jwtPubKey, c.App.JWTIssuer, log))
+	v1.Use(auth.Scope(log))
 	v1.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
 		MaxRequests: 60,
 		Window:      1 * time.Minute,
@@ -279,7 +286,7 @@ func run() error {
 		return fmt.Errorf("register upload routes: %w", err)
 	}
 
-	// Context tokens + AI keys + Query — Zitadel auth + rate limited.
+	// Context tokens + AI keys + Query — auth + rate limited.
 	if err := v1.Create([]router.Subroute{
 		{Method: router.GET, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.List},
 		{Method: router.POST, Path: "/api/v1/repos/{repoID}/context-tokens", Handler: ctxTokensH.Create},
@@ -292,7 +299,7 @@ func run() error {
 		return fmt.Errorf("register phase 5 routes: %w", err)
 	}
 
-	// Account management — Zitadel auth + rate limited.
+	// Account management — auth + rate limited.
 	if err := v1.Create([]router.Subroute{
 		{Method: router.GET, Path: "/api/v1/account", Handler: accountH.GetProfile},
 		{Method: router.PATCH, Path: "/api/v1/account", Handler: accountH.UpdateProfile},
@@ -303,7 +310,7 @@ func run() error {
 		return fmt.Errorf("register account routes: %w", err)
 	}
 
-	// Organization management — Zitadel auth + rate limited.
+	// Organization management — auth + rate limited.
 	if err := v1.Create([]router.Subroute{
 		{Method: router.POST, Path: "/api/v1/orgs", Handler: orgH.CreateOrg},
 		{Method: router.GET, Path: "/api/v1/orgs", Handler: orgH.ListOrgs},

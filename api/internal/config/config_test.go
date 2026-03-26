@@ -9,8 +9,7 @@ import (
 var allEnvVars = []string{
 	"APP_ENV", "ENV_FILE",
 	"GITHUB_APP_ID", "GITHUB_APP_SLUG", "GITHUB_APP_WEBHOOK_SECRET", "GITHUB_APP_PRIVATE_KEY",
-	"ZITADEL_ISSUER_URL", "ZITADEL_PROJECT_ID", "ZITADEL_SERVICE_USER_TOKEN", "ZITADEL_WEBHOOK_SECRET",
-	"HMAC_SIGNING_KEY", "WATCHDOG_SECRET",
+	"JWT_PUBLIC_KEY_BASE64", "JWT_ISSUER", "HMAC_SIGNING_KEY", "WATCHDOG_SECRET",
 	"PORT",
 	"DATABASE_URL", "REDIS_URL",
 	"GCS_BUCKET", "GCS_ENDPOINT",
@@ -18,7 +17,6 @@ var allEnvVars = []string{
 	"HMAC_SIGNING_KEY_PREV", "CLI_API_KEY", "ENCRYPTION_KEY_BASE64",
 }
 
-// setEnv saves originals, sets the provided map, and unsets everything else in allEnvVars.
 func setEnv(t *testing.T, vars map[string]string) {
 	t.Helper()
 	originals := make(map[string]string, len(allEnvVars))
@@ -42,22 +40,20 @@ func setEnv(t *testing.T, vars map[string]string) {
 
 func validEnv() map[string]string {
 	return map[string]string{
-		"GITHUB_APP_ID":              "2895893256896859",
-		"GITHUB_APP_SLUG":            "test-app",
-		"GITHUB_APP_WEBHOOK_SECRET":  "secret",
-		"GITHUB_APP_PRIVATE_KEY":     "test-private-key",
-		"ZITADEL_ISSUER_URL":         "https://auth.zagforge.com",
-		"ZITADEL_PROJECT_ID":         "123456789",
-		"ZITADEL_SERVICE_USER_TOKEN": "pat_test_token",
-		"ZITADEL_WEBHOOK_SECRET":     "whsec_test_secret",
-		"HMAC_SIGNING_KEY":           "test-hmac-key",
-		"WATCHDOG_SECRET":            "test-watchdog-secret",
-		"PORT":                       "8080",
-		"DATABASE_URL":               "postgres://localhost/test",
-		"REDIS_URL":                  "redis://localhost:6379",
-		"GCS_BUCKET":                 "test-bucket",
-		"ENCRYPTION_KEY_BASE64":      "some-base64-key",
-		"CLI_API_KEY":                "zf_pk_random",
+		"GITHUB_APP_ID":             "2895893256896859",
+		"GITHUB_APP_SLUG":           "test-app",
+		"GITHUB_APP_WEBHOOK_SECRET": "secret",
+		"GITHUB_APP_PRIVATE_KEY":    "test-private-key",
+		"JWT_PUBLIC_KEY_BASE64":     "dGVzdC1wdWJrZXk=",
+		"JWT_ISSUER":                "http://localhost:8081",
+		"HMAC_SIGNING_KEY":          "test-hmac-key",
+		"WATCHDOG_SECRET":           "test-watchdog-secret",
+		"PORT":                      "8080",
+		"DATABASE_URL":              "postgres://localhost/test",
+		"REDIS_URL":                 "redis://localhost:6379",
+		"GCS_BUCKET":                "test-bucket",
+		"ENCRYPTION_KEY_BASE64":     "some-base64-key",
+		"CLI_API_KEY":               "zf_pk_random",
 	}
 }
 
@@ -77,11 +73,11 @@ func TestLoad_success(t *testing.T) {
 	if cfg.App.GithubAppPrivateKey != "test-private-key" {
 		t.Errorf("expected private key %q, got %q", "test-private-key", cfg.App.GithubAppPrivateKey)
 	}
-	if cfg.App.ZitadelIssuerURL != "https://auth.zagforge.com" {
-		t.Errorf("expected ZitadelIssuerURL %q, got %q", "https://auth.zagforge.com", cfg.App.ZitadelIssuerURL)
+	if cfg.App.JWTPublicKeyBase64 != "dGVzdC1wdWJrZXk=" {
+		t.Errorf("expected JWTPublicKeyBase64 %q, got %q", "dGVzdC1wdWJrZXk=", cfg.App.JWTPublicKeyBase64)
 	}
-	if cfg.App.ZitadelProjectID != "123456789" {
-		t.Errorf("expected ZitadelProjectID %q, got %q", "123456789", cfg.App.ZitadelProjectID)
+	if cfg.App.JWTIssuer != "http://localhost:8081" {
+		t.Errorf("expected JWTIssuer %q, got %q", "http://localhost:8081", cfg.App.JWTIssuer)
 	}
 	if cfg.App.HMACSigningKey != "test-hmac-key" {
 		t.Errorf("expected HMACSigningKey %q, got %q", "test-hmac-key", cfg.App.HMACSigningKey)
@@ -130,10 +126,8 @@ func TestLoad_missingRequired(t *testing.T) {
 		"GITHUB_APP_SLUG",
 		"GITHUB_APP_WEBHOOK_SECRET",
 		"GITHUB_APP_PRIVATE_KEY",
-		"ZITADEL_ISSUER_URL",
-		"ZITADEL_PROJECT_ID",
-		"ZITADEL_SERVICE_USER_TOKEN",
-		"ZITADEL_WEBHOOK_SECRET",
+		"JWT_PUBLIC_KEY_BASE64",
+		"JWT_ISSUER",
 		"HMAC_SIGNING_KEY",
 		"WATCHDOG_SECRET",
 		"PORT",

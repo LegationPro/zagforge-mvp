@@ -5,12 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/shared/go/authclaims"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
-	"github.com/LegationPro/zagforge/shared/go/store"
 )
 
 type orgIDKey struct{}
@@ -23,47 +22,36 @@ var (
 
 // Scope returns middleware that resolves the active workspace from JWT claims.
 //
-// If the JWT contains an org claim (urn:zitadel:iam:org:id), the request is
-// scoped to that organization and org_id is stored in context.
-//
-// If no org claim is present, the request is scoped to the user's personal
-// workspace and user_id is stored in context.
-//
-// Both user_id and org_id are always available via their respective context
-// helpers — handlers use whichever is valid for the current scope.
-func Scope(queries *store.Queries, log *zap.Logger) func(http.Handler) http.Handler {
+// The org and user IDs come directly from the JWT issued by the auth service.
+// org_id is read from the claims.Org.ID field; user_id from claims.Subject.
+func Scope(log *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, err := ClaimsFromContext(r.Context())
+			claims, err := authclaims.FromContext(r.Context())
 			if err != nil {
 				httputil.ErrResponse(w, http.StatusUnauthorized, ErrClaimsNotFound)
 				return
 			}
 
-			// Always resolve the user from the JWT subject.
-			user, err := queries.GetUserByZitadelID(r.Context(), claims.Subject)
+			// Resolve user ID from JWT subject.
+			userID, err := claims.SubjectUUID()
 			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					log.Warn("scope: user not found", zap.String("zitadel_user_id", claims.Subject))
-					httputil.ErrResponse(w, http.StatusForbidden, ErrUserNotFound)
-					return
-				}
-				log.Error("scope: get user", zap.Error(err))
-				httputil.ErrResponse(w, http.StatusInternalServerError, errors.New("internal error"))
+				log.Warn("scope: invalid user id in claims", zap.String("sub", claims.Subject))
+				httputil.ErrResponse(w, http.StatusForbidden, ErrUserNotFound)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey{}, user.ID)
+			ctx := context.WithValue(r.Context(), userIDKey{}, userID)
 
 			// If the JWT includes an org claim, resolve the org scope.
-			if claims.OrgID != "" {
-				org, err := queries.GetOrgByZitadelID(r.Context(), claims.OrgID)
+			if claims.Org.ID != "" {
+				orgID, err := claims.OrgUUID()
 				if err != nil {
-					log.Warn("scope: org not found", zap.String("zitadel_org_id", claims.OrgID))
+					log.Warn("scope: invalid org id in claims", zap.String("org_id", claims.Org.ID))
 					httputil.ErrResponse(w, http.StatusForbidden, ErrNoActiveOrg)
 					return
 				}
-				ctx = context.WithValue(ctx, orgIDKey{}, org.ID)
+				ctx = context.WithValue(ctx, orgIDKey{}, orgID)
 			}
 
 			next.ServeHTTP(w, r.WithContext(ctx))

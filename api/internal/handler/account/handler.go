@@ -9,7 +9,6 @@ import (
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
-	"github.com/LegationPro/zagforge/api/internal/zitadel"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/store"
 )
@@ -21,13 +20,12 @@ var (
 )
 
 type Handler struct {
-	db      *dbpkg.DB
-	zitadel zitadel.Client
-	log     *zap.Logger
+	db  *dbpkg.DB
+	log *zap.Logger
 }
 
-func NewHandler(db *dbpkg.DB, zitadelClient zitadel.Client, log *zap.Logger) *Handler {
-	return &Handler{db: db, zitadel: zitadelClient, log: log}
+func NewHandler(db *dbpkg.DB, log *zap.Logger) *Handler {
+	return &Handler{db: db, log: log}
 }
 
 // GetProfile returns the authenticated user's profile and org memberships.
@@ -55,10 +53,8 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateProfile updates the authenticated user's username and/or phone.
-// Updates Zitadel first (source of truth), then syncs to local DB.
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	claims, _ := auth.ClaimsFromContext(r.Context())
 
 	body, err := httputil.DecodeJSON[updateProfileRequest](r.Body)
 	if err != nil {
@@ -71,20 +67,9 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update Zitadel first.
-	if err := h.zitadel.UpdateUser(r.Context(), claims.Subject, zitadel.UpdateUserRequest{
-		Username: body.Username,
-		Phone:    derefStr(body.Phone),
-	}); err != nil {
-		h.log.Error("zitadel update user", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
-		return
-	}
-
-	// Sync to local DB.
 	user, err := h.db.Queries.UpdateUser(r.Context(), store.UpdateUserParams{
 		Username:      body.Username,
-		Email:         "", // empty = no change (COALESCE in query)
+		Email:         "",
 		EmailVerified: false,
 		Phone:         pgtype.Text{String: derefStr(body.Phone), Valid: body.Phone != nil},
 		AvatarUrl:     pgtype.Text{},
@@ -96,7 +81,6 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Audit log.
 	if _, err := h.db.Queries.InsertAuditLog(r.Context(), store.InsertAuditLogParams{
 		UserID:   userID,
 		ActorID:  userID,
@@ -109,16 +93,9 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	httputil.OkResponse(w, user)
 }
 
-// DeleteAccount deletes the authenticated user from Zitadel and the local DB.
+// DeleteAccount deletes the authenticated user.
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	claims, _ := auth.ClaimsFromContext(r.Context())
-
-	if err := h.zitadel.DeleteUser(r.Context(), claims.Subject); err != nil {
-		h.log.Error("zitadel delete user", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
-		return
-	}
 
 	if err := h.db.Queries.DeleteUser(r.Context(), userID); err != nil {
 		h.log.Error("delete user", zap.Error(err))
@@ -143,7 +120,7 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	httputil.OkResponse(w, sessions)
 }
 
-// RevokeSession terminates a specific session in Zitadel and removes it locally.
+// RevokeSession terminates a specific session.
 func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 
@@ -153,7 +130,6 @@ func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete from local DB (scoped to user).
 	if err := h.db.Queries.DeleteSession(r.Context(), store.DeleteSessionParams{
 		ID:     sessionID,
 		UserID: userID,
@@ -163,16 +139,11 @@ func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Best-effort Zitadel termination — session is already removed locally.
-	if err := h.zitadel.TerminateSession(r.Context(), sessionID.String()); err != nil {
-		h.log.Warn("zitadel terminate session", zap.Error(err))
-	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
 type profileResponse struct {
-	User        store.User                       `json:"user"`
+	User        store.User                      `json:"user"`
 	Memberships []store.ListMembershipsByUserRow `json:"memberships"`
 }
 

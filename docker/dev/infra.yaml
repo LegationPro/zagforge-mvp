@@ -9,6 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - zagforge_pgdata:/var/lib/postgresql/data
+      - ./init-auth-db.sql:/docker-entrypoint-initdb.d/init-auth-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zagforge"]
       interval: 5s
