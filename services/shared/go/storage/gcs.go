@@ -7,9 +7,10 @@ import (
 	"io"
 
 	"cloud.google.com/go/storage"
-	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
+
+	"github.com/LegationPro/zagforge/shared/go/circuitbreaker"
 )
 
 var (
@@ -28,11 +29,11 @@ type Client struct {
 	bucket *storage.BucketHandle
 	log    *zap.Logger
 	cfg    Config
-	cb     *gobreaker.CircuitBreaker[any]
+	cb     *circuitbreaker.Breaker
 }
 
 // WithCircuitBreaker attaches a circuit breaker to the GCS client.
-func (c *Client) WithCircuitBreaker(cb *gobreaker.CircuitBreaker[any]) *Client {
+func (c *Client) WithCircuitBreaker(cb *circuitbreaker.Breaker) *Client {
 	c.cb = cb
 	return c
 }
@@ -87,8 +88,7 @@ func (c *Client) Upload(ctx context.Context, path string, data []byte) error {
 	if c.cb == nil {
 		return do()
 	}
-	_, err := c.cb.Execute(func() (any, error) { return nil, do() })
-	return err
+	return c.cb.Run(do)
 }
 
 // Download reads the object at the given path from the bucket.
@@ -117,11 +117,7 @@ func (c *Client) Download(ctx context.Context, path string) ([]byte, error) {
 	if c.cb == nil {
 		return do()
 	}
-	result, err := c.cb.Execute(func() (any, error) { return do() })
-	if err != nil {
-		return nil, err
-	}
-	return result.([]byte), nil
+	return circuitbreaker.Execute(c.cb, do)
 }
 
 // SnapshotPath builds the GCS object path for a snapshot.

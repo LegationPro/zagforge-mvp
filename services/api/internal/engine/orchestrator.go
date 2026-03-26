@@ -8,8 +8,9 @@ import (
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	taskspb "cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
-	"github.com/sony/gobreaker/v2"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/LegationPro/zagforge/shared/go/circuitbreaker"
 )
 
 // TaskEnqueuer enqueues a job for worker execution.
@@ -30,11 +31,11 @@ type CloudTasksConfig struct {
 type CloudTasksEnqueuer struct {
 	client *cloudtasks.Client
 	cfg    CloudTasksConfig
-	cb     *gobreaker.CircuitBreaker[any]
+	cb     *circuitbreaker.Breaker
 }
 
 // WithCircuitBreaker attaches a circuit breaker to the Cloud Tasks enqueuer.
-func (e *CloudTasksEnqueuer) WithCircuitBreaker(cb *gobreaker.CircuitBreaker[any]) *CloudTasksEnqueuer {
+func (e *CloudTasksEnqueuer) WithCircuitBreaker(cb *circuitbreaker.Breaker) *CloudTasksEnqueuer {
 	e.cb = cb
 	return e
 }
@@ -95,8 +96,7 @@ func (e *CloudTasksEnqueuer) Enqueue(ctx context.Context, jobID string, jobToken
 	if e.cb == nil {
 		return create()
 	}
-	_, err = e.cb.Execute(func() (any, error) { return nil, create() })
-	return err
+	return e.cb.Run(create)
 }
 
 // Close closes the underlying Cloud Tasks client.

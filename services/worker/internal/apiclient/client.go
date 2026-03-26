@@ -9,9 +9,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/shared/go/circuitbreaker"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 )
 
@@ -53,7 +53,7 @@ type Client struct {
 	signer  *jobtoken.Signer
 	http    *http.Client
 	log     *zap.Logger
-	cb      *gobreaker.CircuitBreaker[any]
+	cb      *circuitbreaker.Breaker
 }
 
 // NewClient creates an API callback client.
@@ -67,7 +67,7 @@ func NewClient(baseURL string, signer *jobtoken.Signer, log *zap.Logger) *Client
 }
 
 // WithCircuitBreaker attaches a circuit breaker to the API client.
-func (c *Client) WithCircuitBreaker(cb *gobreaker.CircuitBreaker[any]) *Client {
+func (c *Client) WithCircuitBreaker(cb *circuitbreaker.Breaker) *Client {
 	c.cb = cb
 	return c
 }
@@ -120,11 +120,7 @@ func (c *Client) Start(ctx context.Context, jobID string) (StartResponse, error)
 	if c.cb == nil {
 		return do()
 	}
-	result, err := c.cb.Execute(func() (any, error) { return do() })
-	if err != nil {
-		return StartResponse{}, err
-	}
-	return result.(StartResponse), nil
+	return circuitbreaker.Execute(c.cb, do)
 }
 
 // Complete calls POST /internal/jobs/complete to report job result.
@@ -170,6 +166,5 @@ func (c *Client) Complete(ctx context.Context, req CompleteRequest) error {
 	if c.cb == nil {
 		return do()
 	}
-	_, err = c.cb.Execute(func() (any, error) { return nil, do() })
-	return err
+	return c.cb.Run(do)
 }

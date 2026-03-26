@@ -15,8 +15,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
+
+	"github.com/LegationPro/zagforge/shared/go/circuitbreaker"
 )
 
 var GithubApiVersion = "2026-03-10"
@@ -25,12 +26,12 @@ var GithubApiVersion = "2026-03-10"
 type ClientHandler struct {
 	client *APIClient
 	log    *zap.Logger
-	cb     *gobreaker.CircuitBreaker[any]
+	cb     *circuitbreaker.Breaker
 }
 
 // WithCircuitBreaker attaches a circuit breaker to the client handler.
 // When set, all GitHub API calls are routed through the breaker.
-func (h *ClientHandler) WithCircuitBreaker(cb *gobreaker.CircuitBreaker[any]) *ClientHandler {
+func (h *ClientHandler) WithCircuitBreaker(cb *circuitbreaker.Breaker) *ClientHandler {
 	h.cb = cb
 	return h
 }
@@ -148,11 +149,7 @@ func (h *ClientHandler) GenerateCloneToken(ctx context.Context, installationID i
 	if h.cb == nil {
 		return do()
 	}
-	result, err := h.cb.Execute(func() (any, error) { return do() })
-	if err != nil {
-		return "", err
-	}
-	return result.(string), nil
+	return circuitbreaker.Execute(h.cb, do)
 }
 
 // CloneRepo performs a shallow clone of repoURL at the given ref into dst.
