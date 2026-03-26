@@ -16,6 +16,7 @@ RUN set -eux; \
 WORKDIR /app
 COPY go.work go.work.sum ./
 COPY services/api/go.mod services/api/go.sum ./services/api/
+COPY services/auth/go.mod services/auth/go.sum ./services/auth/
 COPY services/worker/go.mod services/worker/go.su[m] ./services/worker/
 COPY services/shared/go/go.mod services/shared/go/go.sum ./services/shared/go/
 RUN go work sync
