@@ -5,9 +5,9 @@ vars:
     # Map task ENV to Doppler config names.
     DOPPLER_CONFIG: '{{if eq .ENV "prod"}}prd{{else if eq .ENV "staging"}}stg{{else}}dev{{end}}'
     PROJECT_ID:
-        sh: grep '^project_id' terraform/envs/{{.ENV}}.tfvars | sed 's/.*= *"\(.*\)"/\1/'
+        sh: grep '^project_id' infra/terraform/envs/{{.ENV}}.tfvars | sed 's/.*= *"\(.*\)"/\1/'
     REGION:
-        sh: grep '^region' terraform/envs/{{.ENV}}.tfvars | sed 's/.*= *"\(.*\)"/\1/'
+        sh: grep '^region' infra/terraform/envs/{{.ENV}}.tfvars | sed 's/.*= *"\(.*\)"/\1/'
     REGISTRY: "{{.REGION}}-docker.pkg.dev/{{.PROJECT_ID}}/zagforge"
 
 tasks:
@@ -71,7 +71,7 @@ tasks:
             COMMIT:
                 sh: git rev-parse HEAD
         cmds:
-            - docker build --platform linux/amd64 -f {{.SERVICE}}/Dockerfile -t {{.REGISTRY}}/{{.SERVICE}}:{{.COMMIT}} .
+            - docker build --platform linux/amd64 -f services/{{.SERVICE}}/Dockerfile -t {{.REGISTRY}}/{{.SERVICE}}:{{.COMMIT}} .
             - docker push {{.REGISTRY}}/{{.SERVICE}}:{{.COMMIT}}
 
     deploy:
@@ -177,14 +177,14 @@ tasks:
     tf:plan:
         desc: "Terraform plan. Usage: task deploy:tf:plan [ENV=staging]"
         cmds:
-            - cd terraform && terraform plan -var-file=envs/{{.ENV}}.tfvars
+            - cd infra/terraform && terraform plan -var-file=envs/{{.ENV}}.tfvars
 
     tf:apply:
         desc: "Terraform apply. Usage: task deploy:tf:apply [ENV=staging]"
         cmds:
-            - cd terraform && terraform apply -var-file=envs/{{.ENV}}.tfvars
+            - cd infra/terraform && terraform apply -var-file=envs/{{.ENV}}.tfvars
 
     tf:output:
         desc: Show Terraform outputs
         cmds:
-            - cd terraform && terraform output
+            - cd infra/terraform && terraform output

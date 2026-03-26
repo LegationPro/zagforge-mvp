@@ -1,11 +1,11 @@
 services:
   migrate:
     build:
-      context: ../..
-      dockerfile: api/Dockerfile.dev
+      context: ../../..
+      dockerfile: services/api/Dockerfile.dev
     command: >
       migrate
-        -path /app/api/internal/db/migrations
+        -path /app/services/api/internal/db/migrations
         -database postgres://zagforge:zagforge@postgres:5432/zagforge?sslmode=disable
         up
     depends_on:
@@ -14,12 +14,12 @@ services:
 
   api:
     build:
-      context: ../..
-      dockerfile: api/Dockerfile.dev
+      context: ../../..
+      dockerfile: services/api/Dockerfile.dev
     ports:
       - "8080:8080"
     volumes:
-      - ../..:/app
+      - ../../..:/app
     environment:
       # Docker-network overrides (Doppler has localhost versions).
       DATABASE_URL: postgres://zagforge:zagforge@postgres:5432/zagforge?sslmode=disable
@@ -57,11 +57,11 @@ services:
 
   auth-migrate:
     build:
-      context: ../..
-      dockerfile: auth/Dockerfile.dev
+      context: ../../..
+      dockerfile: services/auth/Dockerfile.dev
     command: >
       migrate
-        -path /app/auth/internal/db/migrations
+        -path /app/services/auth/internal/db/migrations
         -database postgres://zagforge:zagforge@postgres:5432/zagforge_auth?sslmode=disable
         up
     depends_on:
@@ -70,12 +70,12 @@ services:
 
   auth:
     build:
-      context: ../..
-      dockerfile: auth/Dockerfile.dev
+      context: ../../..
+      dockerfile: services/auth/Dockerfile.dev
     ports:
       - "8081:8081"
     volumes:
-      - ../..:/app
+      - ../../..:/app
     environment:
       AUTH_DATABASE_URL: postgres://zagforge:zagforge@postgres:5432/zagforge_auth?sslmode=disable
       REDIS_URL: redis://redis:6379/1
@@ -111,11 +111,11 @@ services:
 
   worker:
     build:
-      context: ../..
-      dockerfile: worker/Dockerfile.dev
+      context: ../../..
+      dockerfile: services/worker/Dockerfile.dev
     volumes:
-      - ../..:/app
-      - ../../.reports:/data/reports
+      - ../../..:/app
+      - ../../../.reports:/data/reports
     environment:
       # Docker-network overrides.
       DATABASE_URL: postgres://zagforge:zagforge@postgres:5432/zagforge?sslmode=disable

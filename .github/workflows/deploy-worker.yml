@@ -34,10 +34,10 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
       - name: Lint
-        run: golangci-lint run ./worker/... ./shared/go/...
+        run: golangci-lint run ./services/worker/... ./services/shared/go/...
 
       - name: Test
-        run: go test -race ./worker/... ./shared/go/...
+        run: go test -race ./services/worker/... ./services/shared/go/...
 
   deploy:
     name: Build & Deploy Worker (${{ inputs.environment }})
@@ -69,7 +69,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: worker/Dockerfile
+          file: services/worker/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/worker:${{ github.sha }}

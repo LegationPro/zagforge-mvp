@@ -34,10 +34,10 @@ jobs:
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 
       - name: Lint
-        run: golangci-lint run ./auth/... ./shared/go/...
+        run: golangci-lint run ./services/auth/... ./services/shared/go/...
 
       - name: Test
-        run: go test -race ./auth/... ./shared/go/...
+        run: go test -race ./services/auth/... ./services/shared/go/...
 
   deploy:
     name: Build & Deploy Auth (${{ inputs.environment }})
@@ -69,7 +69,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: auth/Dockerfile
+          file: services/auth/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/auth:${{ github.sha }}

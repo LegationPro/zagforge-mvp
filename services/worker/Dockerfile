@@ -15,13 +15,13 @@ RUN set -eux; \
 
 WORKDIR /app
 COPY go.work go.work.sum ./
-COPY api/go.mod api/go.sum ./api/
-COPY worker/go.mod worker/go.su[m] ./worker/
-COPY shared/go/go.mod shared/go/go.sum ./shared/go/
+COPY services/api/go.mod services/api/go.sum ./services/api/
+COPY services/worker/go.mod services/worker/go.su[m] ./services/worker/
+COPY services/shared/go/go.mod services/shared/go/go.sum ./services/shared/go/
 RUN go work sync
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/worker ./worker/cmd/
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/worker ./services/worker/cmd/
 
 FROM alpine:3.21
 RUN apk add --no-cache git gcompat ca-certificates && \
