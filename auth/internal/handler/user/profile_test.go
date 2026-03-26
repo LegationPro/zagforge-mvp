@@ -136,6 +136,45 @@ func TestUserIDFromContext_invalidSubject(t *testing.T) {
 	}
 }
 
+func TestUpdateMe_invalidAge_returns400(t *testing.T) {
+	h := newTestHandler()
+	body := `{"first_name":"Jane","age":5}`
+	r := httptest.NewRequest(http.MethodPut, "/auth/me", bytes.NewBufferString(body))
+	r = requestWithClaims(r, "550e8400-e29b-41d4-a716-446655440000")
+	w := httptest.NewRecorder()
+
+	h.UpdateMe(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for age < 13, got %d", w.Code)
+	}
+}
+
+func TestUpdateOnboarding_invalidJSON_returns400(t *testing.T) {
+	h := newTestHandler()
+	r := httptest.NewRequest(http.MethodPut, "/auth/me/onboarding", bytes.NewBufferString("not json"))
+	r = requestWithClaims(r, "550e8400-e29b-41d4-a716-446655440000")
+	w := httptest.NewRecorder()
+
+	h.UpdateOnboarding(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListIdentities_noClaims_returns401(t *testing.T) {
+	h := newTestHandler()
+	r := httptest.NewRequest(http.MethodGet, "/auth/me/identities", nil)
+	w := httptest.NewRecorder()
+
+	h.ListIdentities(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
 func TestResponseIsJSON(t *testing.T) {
 	h := newTestHandler()
 	r := httptest.NewRequest(http.MethodGet, "/auth/me", nil)

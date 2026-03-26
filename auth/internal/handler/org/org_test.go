@@ -156,6 +156,77 @@ func TestDelete_noClaims_returns401(t *testing.T) {
 	}
 }
 
+func TestCreate_missingName_returns400(t *testing.T) {
+	h := newTestHandler()
+	body := `{"slug":"acme"}`
+	r := httptest.NewRequest(http.MethodPost, "/auth/orgs", bytes.NewBufferString(body))
+	r = requestWithClaims(r, "550e8400-e29b-41d4-a716-446655440000")
+	w := httptest.NewRecorder()
+
+	h.Create(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreate_slugTooLong_returns400(t *testing.T) {
+	h := newTestHandler()
+	longSlug := string(make([]byte, 51))
+	for i := range longSlug {
+		longSlug = longSlug[:i] + "a" + longSlug[i+1:]
+	}
+	body := `{"slug":"` + longSlug + `","name":"Test"}`
+	r := httptest.NewRequest(http.MethodPost, "/auth/orgs", bytes.NewBufferString(body))
+	r = requestWithClaims(r, "550e8400-e29b-41d4-a716-446655440000")
+	w := httptest.NewRecorder()
+
+	h.Create(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreate_emptyBody_returns400(t *testing.T) {
+	h := newTestHandler()
+	r := httptest.NewRequest(http.MethodPost, "/auth/orgs", bytes.NewBufferString("{}"))
+	r = requestWithClaims(r, "550e8400-e29b-41d4-a716-446655440000")
+	w := httptest.NewRecorder()
+
+	h.Create(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCreate_invalidSubjectUUID_returns401(t *testing.T) {
+	h := newTestHandler()
+	body := `{"slug":"acme","name":"Acme"}`
+	r := httptest.NewRequest(http.MethodPost, "/auth/orgs", bytes.NewBufferString(body))
+	claims := &authclaims.Claims{}
+	claims.Subject = "not-a-uuid"
+	r = r.WithContext(authclaims.NewContext(r.Context(), claims))
+	w := httptest.NewRecorder()
+
+	h.Create(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestListMembers_invalidOrgID_returns400(t *testing.T) {
+	h := newTestHandler()
+	w := chiRequest(t, http.MethodGet, "/auth/orgs/{orgID}/members",
+		"/auth/orgs/not-a-uuid/members", h.ListMembers, "")
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestResponseIsJSON(t *testing.T) {
 	h := newTestHandler()
 	r := httptest.NewRequest(http.MethodPost, "/auth/orgs", bytes.NewBufferString("bad"))
