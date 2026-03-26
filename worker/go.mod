@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/LegationPro/zagforge/shared/go v0.0.0
 	github.com/caarlos0/env/v11 v11.4.0
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/jackc/pgx/v5 v5.8.0
 	go.uber.org/zap v1.27.1
 )

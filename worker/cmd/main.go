@@ -9,11 +9,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
+	"github.com/LegationPro/zagforge/shared/go/dbpool"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 	"github.com/LegationPro/zagforge/shared/go/logger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaplogger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaprecoverer"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
 	"github.com/LegationPro/zagforge/shared/go/runner"
 	"github.com/LegationPro/zagforge/shared/go/storage"
@@ -39,7 +43,9 @@ func run() error {
 	}
 	defer func() { _ = log.Sync() }()
 
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	poolCfg := dbpool.DefaultConfig()
+	poolCfg.MaxConns = int32(cfg.MaxConcurrency) + 5
+	pool, err := dbpool.Connect(context.Background(), cfg.DatabaseURL, poolCfg, log)
 	if err != nil {
 		return fmt.Errorf("connect to db: %w", err)
 	}
@@ -98,12 +104,21 @@ func run() error {
 func runHTTP(ctx context.Context, cfg *config.Config, queries *store.Queries, exec *executor.Executor, signer *jobtoken.Signer, log *zap.Logger) error {
 	h := handler.New(queries, exec, signer, log)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /run", h.Run)
+	r := chi.NewRouter()
+
+	// Global middleware stack.
+	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID)
+	r.Use(zaplogger.Middleware(log))
+	r.Use(zaprecoverer.Middleware(log))
+	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.Throttle(cfg.MaxConcurrency))
+
+	r.Post("/run", h.Run)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: mux,
+		Handler: r,
 	}
 
 	go func() {
@@ -133,5 +148,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-// test

@@ -56,3 +56,8 @@ func (r *Router) Head(path string, handlerFn http.HandlerFunc) {
 func (r *Router) Handler() http.Handler {
 	return r.mux
 }
+
+// Mux returns the underlying chi.Mux for use with docgen or direct access.
+func (r *Router) Mux() *chi.Mux {
+	return r.mux
+}

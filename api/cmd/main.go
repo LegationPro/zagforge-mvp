@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/docgen"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -42,8 +44,11 @@ import (
 	"github.com/LegationPro/zagforge/api/internal/middleware/watchdogauth"
 	"github.com/LegationPro/zagforge/api/internal/service"
 	"github.com/LegationPro/zagforge/api/internal/service/encryption"
+	"github.com/LegationPro/zagforge/shared/go/dbpool"
 	"github.com/LegationPro/zagforge/shared/go/jobtoken"
 	"github.com/LegationPro/zagforge/shared/go/logger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaplogger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaprecoverer"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
 	"github.com/LegationPro/zagforge/shared/go/router"
 	storagepkg "github.com/LegationPro/zagforge/shared/go/storage"
@@ -76,7 +81,7 @@ func run() error {
 	defer func() { _ = log.Sync() }()
 
 	// Initialize database
-	pool, err := db.Connect(context.Background(), c.DB.URL)
+	pool, err := dbpool.Connect(context.Background(), c.DB.URL, dbpool.DefaultConfig(), log)
 	if err != nil {
 		return fmt.Errorf("connect to db: %w", err)
 	}
@@ -195,6 +200,15 @@ func run() error {
 	orgH := orghandler.NewHandler(database, log)
 
 	r := router.New()
+
+	// Global middleware stack.
+	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID)
+	r.Use(zaplogger.Middleware(log))
+	r.Use(zaprecoverer.Middleware(log))
+	r.Use(middleware.RedirectSlashes)
+	r.Use(middleware.Timeout(10 * time.Second))
+	r.Use(middleware.ThrottleBacklog(100, 50, 5*time.Second))
 
 	// Health — no auth, no rate limit.
 	healthRoutes := r.Group()
@@ -335,6 +349,11 @@ func run() error {
 		{Method: router.GET, Path: "/api/v1/orgs/{orgID}/audit-log", Handler: orgH.ListAuditLog},
 	}); err != nil {
 		return fmt.Errorf("register org routes: %w", err)
+	}
+
+	// Print registered routes in dev mode for documentation/debugging.
+	if os.Getenv("APP_ENV") == "dev" {
+		docgen.PrintRoutes(r.Mux())
 	}
 
 	srv := &http.Server{

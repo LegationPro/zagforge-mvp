@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/docgen"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -35,7 +37,10 @@ import (
 	oauthgoogle "github.com/LegationPro/zagforge/auth/internal/service/oauth/google"
 	sessionsvc "github.com/LegationPro/zagforge/auth/internal/service/session"
 	"github.com/LegationPro/zagforge/auth/internal/service/token"
+	"github.com/LegationPro/zagforge/shared/go/dbpool"
 	"github.com/LegationPro/zagforge/shared/go/logger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaplogger"
+	"github.com/LegationPro/zagforge/shared/go/middleware/zaprecoverer"
 	"github.com/LegationPro/zagforge/shared/go/router"
 )
 
@@ -52,7 +57,7 @@ func run() error {
 	defer func() { _ = log.Sync() }()
 
 	// Database.
-	pool, err := db.Connect(context.Background(), c.DB.URL)
+	pool, err := dbpool.Connect(context.Background(), c.DB.URL, dbpool.DefaultConfig(), log)
 	if err != nil {
 		return fmt.Errorf("connect to db: %w", err)
 	}
@@ -124,6 +129,15 @@ func run() error {
 	pubKey := tokenSvc.PublicKey()
 
 	r := router.New()
+
+	// Global middleware stack.
+	r.Use(middleware.RealIP)
+	r.Use(middleware.RequestID)
+	r.Use(zaplogger.Middleware(log))
+	r.Use(zaprecoverer.Middleware(log))
+	r.Use(middleware.RedirectSlashes)
+	r.Use(middleware.Timeout(10 * time.Second))
+	r.Use(middleware.ThrottleBacklog(100, 50, 5*time.Second))
 
 	// Health — no auth, no rate limit.
 	healthRoutes := r.Group()
@@ -263,6 +277,11 @@ func run() error {
 		{Method: router.GET, Path: "/auth/invites/{token}", Handler: inviteH.GetByToken},
 	}); err != nil {
 		return fmt.Errorf("register public invite routes: %w", err)
+	}
+
+	// Print registered routes in dev mode for documentation/debugging.
+	if os.Getenv("APP_ENV") == "dev" {
+		docgen.PrintRoutes(r.Mux())
 	}
 
 	srv := &http.Server{
