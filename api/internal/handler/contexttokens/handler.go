@@ -5,20 +5,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	store "github.com/LegationPro/zagforge/shared/go/store"
 )
 
 var (
-	errInternal      = errors.New("internal error")
 	errRepoNotFound  = errors.New("repository not found")
-	errInvalidBody   = errors.New("invalid request body")
 	errInvalidExpiry = errors.New("expires_at must be a valid RFC3339 timestamp")
 )
 
@@ -39,22 +37,6 @@ func NewHandler(db *dbpkg.DB, log *zap.Logger) *Handler {
 	return &Handler{db: db, log: log}
 }
 
-// verifyRepoOwnership checks that the repo exists and belongs to the requesting org.
-func (h *Handler) verifyRepoOwnership(r *http.Request, repoID pgtype.UUID) error {
-	repo, err := h.db.Queries.GetRepoByID(r.Context(), repoID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errRepoNotFound
-		}
-		return err
-	}
-	orgID := auth.OrgIDFromContext(r.Context())
-	if repo.OrgID != orgID {
-		return errRepoNotFound
-	}
-	return nil
-}
-
 // List returns context tokens for a repo.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	repoID, err := httputil.ParseUUID(r, "repoID")
@@ -63,7 +45,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+	orgID := auth.OrgIDFromContext(r.Context())
+	if err := handlerpkg.VerifyRepoOwnership(r.Context(), h.db.Queries, repoID, orgID); err != nil {
 		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
 		return
 	}
@@ -71,7 +54,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	tokens, err := h.db.Queries.ListContextTokensByRepo(r.Context(), repoID)
 	if err != nil {
 		h.log.Error("list context tokens", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 	httputil.OkResponse(w, tokens)
@@ -87,7 +70,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+	if err := handlerpkg.VerifyRepoOwnership(r.Context(), h.db.Queries, repoID, orgID); err != nil {
 		httputil.ErrResponse(w, http.StatusNotFound, errRepoNotFound)
 		return
 	}
@@ -97,17 +80,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt *string `json:"expires_at"`
 	}](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 
 	raw, err := generateToken()
 	if err != nil {
 		h.log.Error("generate token", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
-	hash := sha256Hash(raw)
+	hash := handlerpkg.SHA256Hash(raw)
 
 	var expiresAt pgtype.Timestamptz
 	if body.ExpiresAt != nil {
@@ -130,7 +113,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("insert context token", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -162,7 +145,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		ID: tokenID, OrgID: orgID,
 	}); err != nil {
 		h.log.Error("delete context token", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

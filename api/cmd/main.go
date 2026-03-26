@@ -49,6 +49,18 @@ import (
 	storagepkg "github.com/LegationPro/zagforge/shared/go/storage"
 )
 
+const (
+	bodyLimit1MB  = 1 << 20
+	bodyLimit10MB = 10 << 20
+
+	rateLimitOAuth   = 30
+	rateLimitWebhook = 120
+	rateLimitAPI     = 60
+	rateLimitUpload  = 60
+
+	rateLimitWindow = 1 * time.Minute
+)
+
 func run() error {
 	// Load env config
 	c, err := config.Load()
@@ -196,8 +208,8 @@ func run() error {
 	// GitHub App OAuth — no auth, rate limited by IP to prevent abuse.
 	authRoutes := r.Group()
 	authRoutes.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
-		MaxRequests: 30,
-		Window:      1 * time.Minute,
+		MaxRequests: rateLimitOAuth,
+		Window:      rateLimitWindow,
 	}, "oauth", log))
 	if err := authRoutes.Create([]router.Subroute{
 		{Method: router.GET, Path: "/auth/github/install", Handler: githubAuthH.Install},
@@ -208,11 +220,11 @@ func run() error {
 
 	// Webhooks — body limit + Content-Type + rate limited by IP, higher burst (GitHub sends bursts).
 	internal := r.Group()
-	internal.Use(bodylimit.Limit(1 << 20)) // 1MB max
+	internal.Use(bodylimit.Limit(bodyLimit1MB))
 	internal.Use(contenttype.RequireJSON())
 	internal.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
-		MaxRequests: 120,
-		Window:      1 * time.Minute,
+		MaxRequests: rateLimitWebhook,
+		Window:      rateLimitWindow,
 	}, "webhook", log))
 	if err := internal.Create([]router.Subroute{
 		{Method: router.POST, Path: "/internal/webhooks/github", Handler: wh.ServeHTTP},
@@ -222,7 +234,7 @@ func run() error {
 
 	// Job callbacks — body limit + Content-Type + signed job token auth.
 	callbacks := r.Group()
-	callbacks.Use(bodylimit.Limit(1 << 20)) // 1MB max
+	callbacks.Use(bodylimit.Limit(bodyLimit1MB))
 	callbacks.Use(contenttype.RequireJSON())
 	callbacks.Use(jobtokenmw.Auth(signer, log))
 	if err := callbacks.Create([]router.Subroute{
@@ -247,8 +259,8 @@ func run() error {
 	v1.Use(auth.Auth(jwtPubKey, c.App.JWTIssuer, log))
 	v1.Use(auth.Scope(log))
 	v1.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
-		MaxRequests: 60,
-		Window:      1 * time.Minute,
+		MaxRequests: rateLimitAPI,
+		Window:      rateLimitWindow,
 	}, "api", log))
 	if err := v1.Create([]router.Subroute{
 		{Method: router.GET, Path: "/api/v1/repos/{repoID}", Handler: apiH.GetRepo},
@@ -273,12 +285,12 @@ func run() error {
 
 	// CLI upload — body limit + CLI token auth + rate limited.
 	uploadRoutes := r.Group()
-	uploadRoutes.Use(bodylimit.Limit(10 << 20)) // 10MB max
+	uploadRoutes.Use(bodylimit.Limit(bodyLimit10MB))
 	uploadRoutes.Use(contenttype.RequireJSON())
 	uploadRoutes.Use(clitoken.Auth(c.App.CLIAPIKey))
 	uploadRoutes.Use(ratelimit.RateLimit(rdb, ratelimit.RateLimitConfig{
-		MaxRequests: 60,
-		Window:      1 * time.Minute,
+		MaxRequests: rateLimitUpload,
+		Window:      rateLimitWindow,
 	}, "upload", log))
 	if err := uploadRoutes.Create([]router.Subroute{
 		{Method: router.POST, Path: "/api/v1/upload", Handler: uploadH.Upload},

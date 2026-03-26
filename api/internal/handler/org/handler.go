@@ -11,16 +11,14 @@ import (
 	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/store"
 )
 
 var (
-	errInternal      = errors.New("internal error")
-	errInvalidBody   = errors.New("invalid request body")
 	errOrgNotFound   = errors.New("organization not found")
-	errForbidden     = errors.New("insufficient permissions")
 	errAlreadyMember = errors.New("user is already a member")
 	errUserNotFound  = errors.New("user not found")
 	errLastOwner     = errors.New("cannot remove the last owner")
@@ -46,10 +44,10 @@ func (h *Handler) requireRole(r *http.Request, orgID, userID pgtype.UUID, allowe
 		UserID: userID, OrgID: orgID,
 	})
 	if err != nil {
-		return m, errForbidden
+		return m, handlerpkg.ErrForbidden
 	}
 	if !slices.Contains(allowed, m.Role) {
-		return m, errForbidden
+		return m, handlerpkg.ErrForbidden
 	}
 	return m, nil
 }
@@ -60,7 +58,7 @@ func (h *Handler) CreateOrg(w http.ResponseWriter, r *http.Request) {
 
 	body, err := httputil.DecodeJSON[orgRequest](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 	if body.Name == "" || body.Slug == "" {
@@ -68,16 +66,15 @@ func (h *Handler) CreateOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create org with a generated Zitadel org ID placeholder.
-	// When Zitadel org sync is implemented, this will be replaced with the real ID.
+	// Auth org ID — placeholder until org is created via the auth service.
 	org, err := h.db.Queries.UpsertOrg(r.Context(), store.UpsertOrgParams{
-		ZitadelOrgID: fmt.Sprintf("local_%s", body.Slug),
-		Slug:         body.Slug,
-		Name:         body.Name,
+		AuthOrgID: fmt.Sprintf("local_%s", body.Slug),
+		Slug:      body.Slug,
+		Name:      body.Name,
 	})
 	if err != nil {
 		h.log.Error("create org", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -89,7 +86,7 @@ func (h *Handler) CreateOrg(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("create owner membership", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -104,7 +101,7 @@ func (h *Handler) ListOrgs(w http.ResponseWriter, r *http.Request) {
 	memberships, err := h.db.Queries.ListMembershipsByUser(r.Context(), userID)
 	if err != nil {
 		h.log.Error("list orgs", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -121,13 +118,13 @@ func (h *Handler) UpdateOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, userID, "owner", "admin"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
 	body, err := httputil.DecodeJSON[orgRequest](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 	if body.Name == "" || body.Slug == "" {
@@ -144,7 +141,7 @@ func (h *Handler) UpdateOrg(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("update org", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -162,13 +159,13 @@ func (h *Handler) DeleteOrg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, userID, "owner"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
 	if err := h.db.Queries.DeleteOrganization(r.Context(), orgID); err != nil {
 		h.log.Error("delete org", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -185,14 +182,14 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, userID, "owner", "admin", "member"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
 	members, err := h.db.Queries.ListMembershipsByOrg(r.Context(), orgID)
 	if err != nil {
 		h.log.Error("list members", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -209,13 +206,13 @@ func (h *Handler) InviteMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, userID, "owner", "admin"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
 	body, err := httputil.DecodeJSON[inviteRequest](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 	if body.Email == "" {
@@ -238,7 +235,7 @@ func (h *Handler) InviteMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.log.Error("lookup invitee", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -275,13 +272,13 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 
 	callerMembership, err := h.requireRole(r, orgID, callerID, "owner", "admin")
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
 	body, err := httputil.DecodeJSON[roleRequest](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 	if !slices.Contains(validRoles, body.Role) {
@@ -309,7 +306,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		count, err := h.db.Queries.CountOwnersByOrg(r.Context(), orgID)
 		if err != nil {
 			h.log.Error("count owners", zap.Error(err))
-			httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+			httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 			return
 		}
 		if count <= 1 {
@@ -323,7 +320,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("update role", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -347,7 +344,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, callerID, "owner", "admin"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
@@ -363,7 +360,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		count, err := h.db.Queries.CountOwnersByOrg(r.Context(), orgID)
 		if err != nil {
 			h.log.Error("count owners", zap.Error(err))
-			httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+			httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 			return
 		}
 		if count <= 1 {
@@ -376,7 +373,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		UserID: targetUserID, OrgID: orgID,
 	}); err != nil {
 		h.log.Error("remove member", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -394,7 +391,7 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := h.requireRole(r, orgID, userID, "owner", "admin"); err != nil {
-		httputil.ErrResponse(w, http.StatusForbidden, errForbidden)
+		httputil.ErrResponse(w, http.StatusForbidden, handlerpkg.ErrForbidden)
 		return
 	}
 
@@ -412,7 +409,7 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("list audit log", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 

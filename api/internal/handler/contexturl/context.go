@@ -14,6 +14,7 @@ import (
 
 	"github.com/LegationPro/zagforge/api/internal/cache/contextcache"
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/service/assembly"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	githubprovider "github.com/LegationPro/zagforge/shared/go/provider/github"
@@ -26,7 +27,6 @@ var (
 	errExpired          = errors.New("context token has expired")
 	errSnapshotNotFound = errors.New("no snapshot available for this token")
 	errSnapshotOutdated = errors.New("snapshot outdated: re-run zigzag --upload to generate a v2 snapshot")
-	errInternal         = errors.New("internal error")
 )
 
 type Handler struct {
@@ -97,7 +97,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	} else {
 		repo, rerr := h.db.Queries.GetRepoByID(r.Context(), tok.RepoID)
 		if rerr != nil {
-			httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+			httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 			return
 		}
 		snap, err = h.db.Queries.GetLatestSnapshot(r.Context(), store.GetLatestSnapshotParams{
@@ -127,7 +127,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	metaBytes, err := h.storage.Download(r.Context(), snap.GcsPath)
 	if err != nil {
 		h.log.Error("download snapshot from gcs", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -136,13 +136,13 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.Unmarshal(metaBytes, &meta); err != nil {
 		h.log.Error("unmarshal snapshot metadata", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
 	repo, err := h.db.Queries.GetRepoByID(r.Context(), tok.RepoID)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 

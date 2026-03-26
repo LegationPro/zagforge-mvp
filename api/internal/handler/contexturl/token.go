@@ -1,11 +1,7 @@
 package contexturl
 
-import (
-	"crypto/sha256"
-	"encoding/hex"
-)
+import handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 
 func tokenHash(raw string) string {
-	h := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(h[:])
+	return handlerpkg.SHA256Hash(raw)
 }

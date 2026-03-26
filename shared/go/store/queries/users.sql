@@ -1,7 +1,7 @@
 -- name: UpsertUser :one
-INSERT INTO users (zitadel_user_id, username, email, email_verified, phone, avatar_url)
+INSERT INTO users (auth_user_id, username, email, email_verified, phone, avatar_url)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (zitadel_user_id) DO UPDATE
+ON CONFLICT (auth_user_id) DO UPDATE
     SET username       = EXCLUDED.username,
         email          = EXCLUDED.email,
         email_verified = EXCLUDED.email_verified,
@@ -9,8 +9,8 @@ ON CONFLICT (zitadel_user_id) DO UPDATE
         avatar_url     = EXCLUDED.avatar_url
 RETURNING *;
 
--- name: GetUserByZitadelID :one
-SELECT * FROM users WHERE zitadel_user_id = $1;
+-- name: GetUserByAuthID :one
+SELECT * FROM users WHERE auth_user_id = $1;
 
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;

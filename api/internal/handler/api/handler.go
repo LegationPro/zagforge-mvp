@@ -2,14 +2,11 @@ package api
 
 import (
 	"errors"
-	"net/http"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
-	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 )
 
 const maxBranchLength = 256
@@ -23,7 +20,9 @@ var (
 	ErrSnapshotNotFound  = errors.New("snapshot not found")
 	ErrBranchRequired    = errors.New("branch query param required")
 	ErrBranchTooLong     = errors.New("branch name exceeds maximum length")
-	ErrInternal          = errors.New("internal error")
+
+	// ErrInternal is an alias for the shared internal error.
+	ErrInternal = handlerpkg.ErrInternal
 )
 
 type Handler struct {
@@ -33,20 +32,4 @@ type Handler struct {
 
 func NewHandler(db *dbpkg.DB, log *zap.Logger) *Handler {
 	return &Handler{db: db, log: log}
-}
-
-// verifyRepoOwnership checks that the repo exists and belongs to the requesting org.
-func (h *Handler) verifyRepoOwnership(r *http.Request, repoID pgtype.UUID) error {
-	repo, err := h.db.Queries.GetRepoByID(r.Context(), repoID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrRepoNotFound
-		}
-		return err
-	}
-	orgID := auth.OrgIDFromContext(r.Context())
-	if repo.OrgID != orgID {
-		return ErrRepoNotFound
-	}
-	return nil
 }

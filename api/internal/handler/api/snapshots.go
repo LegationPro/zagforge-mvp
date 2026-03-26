@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/store"
@@ -65,7 +66,8 @@ func (h *Handler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+	orgID := auth.OrgIDFromContext(r.Context())
+	if err := handlerpkg.VerifyRepoOwnership(r.Context(), h.db.Queries, repoID, orgID); err != nil {
 		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}
@@ -96,7 +98,8 @@ func (h *Handler) GetLatestSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.verifyRepoOwnership(r, repoID); err != nil {
+	orgID := auth.OrgIDFromContext(r.Context())
+	if err := handlerpkg.VerifyRepoOwnership(r.Context(), h.db.Queries, repoID, orgID); err != nil {
 		httputil.ErrResponse(w, http.StatusNotFound, ErrRepoNotFound)
 		return
 	}

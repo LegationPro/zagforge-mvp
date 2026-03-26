@@ -35,17 +35,17 @@ func (q *Queries) DeleteSession(ctx context.Context, arg DeleteSessionParams) er
 	return err
 }
 
-const deleteSessionByZitadelID = `-- name: DeleteSessionByZitadelID :exec
-DELETE FROM sessions WHERE zitadel_session_id = $1
+const deleteSessionByAuthID = `-- name: DeleteSessionByAuthID :exec
+DELETE FROM sessions WHERE auth_session_id = $1
 `
 
-func (q *Queries) DeleteSessionByZitadelID(ctx context.Context, zitadelSessionID string) error {
-	_, err := q.db.Exec(ctx, deleteSessionByZitadelID, zitadelSessionID)
+func (q *Queries) DeleteSessionByAuthID(ctx context.Context, authSessionID string) error {
+	_, err := q.db.Exec(ctx, deleteSessionByAuthID, authSessionID)
 	return err
 }
 
 const listSessionsByUser = `-- name: ListSessionsByUser :many
-SELECT id, user_id, zitadel_session_id, device_name, ip_address, last_active_at, created_at FROM sessions
+SELECT id, user_id, auth_session_id, device_name, ip_address, last_active_at, created_at FROM sessions
 WHERE user_id = $1
 ORDER BY last_active_at DESC
 `
@@ -62,7 +62,7 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID pgtype.UUID) ([
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
-			&i.ZitadelSessionID,
+			&i.AuthSessionID,
 			&i.DeviceName,
 			&i.IpAddress,
 			&i.LastActiveAt,
@@ -79,26 +79,26 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID pgtype.UUID) ([
 }
 
 const upsertSession = `-- name: UpsertSession :one
-INSERT INTO sessions (user_id, zitadel_session_id, device_name, ip_address)
+INSERT INTO sessions (user_id, auth_session_id, device_name, ip_address)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (zitadel_session_id) DO UPDATE
+ON CONFLICT (auth_session_id) DO UPDATE
     SET last_active_at = now(),
         device_name    = EXCLUDED.device_name,
         ip_address     = EXCLUDED.ip_address
-RETURNING id, user_id, zitadel_session_id, device_name, ip_address, last_active_at, created_at
+RETURNING id, user_id, auth_session_id, device_name, ip_address, last_active_at, created_at
 `
 
 type UpsertSessionParams struct {
-	UserID           pgtype.UUID
-	ZitadelSessionID string
-	DeviceName       pgtype.Text
-	IpAddress        *netip.Addr
+	UserID        pgtype.UUID
+	AuthSessionID string
+	DeviceName    pgtype.Text
+	IpAddress     *netip.Addr
 }
 
 func (q *Queries) UpsertSession(ctx context.Context, arg UpsertSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, upsertSession,
 		arg.UserID,
-		arg.ZitadelSessionID,
+		arg.AuthSessionID,
 		arg.DeviceName,
 		arg.IpAddress,
 	)
@@ -106,7 +106,7 @@ func (q *Queries) UpsertSession(ctx context.Context, arg UpsertSessionParams) (S
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.ZitadelSessionID,
+		&i.AuthSessionID,
 		&i.DeviceName,
 		&i.IpAddress,
 		&i.LastActiveAt,

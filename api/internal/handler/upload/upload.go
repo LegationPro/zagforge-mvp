@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/validate"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/storage"
@@ -19,7 +20,6 @@ var (
 	errSnapshotVersion  = errors.New("metadata_snapshot.snapshot_version must be 2")
 	errOrgNotFound      = errors.New("organization not found")
 	errRepoNotConnected = errors.New("repository not connected; install the Zagforge GitHub App first")
-	errInternal         = errors.New("internal error")
 )
 
 type snapshotMetadata struct {
@@ -100,7 +100,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		h.log.Error("marshal snapshot", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -109,7 +109,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.storage.Upload(ctx, gcsPath, metaJSON); err != nil {
 		h.log.Error("write snapshot to gcs", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("insert snapshot", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 

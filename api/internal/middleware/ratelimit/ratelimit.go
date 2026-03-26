@@ -25,7 +25,7 @@ type RateLimitConfig struct {
 }
 
 // keyFunc extracts the rate limit key from a request.
-// Authenticated requests use the Zitadel user ID (JWT subject); unauthenticated use the client IP.
+// Authenticated requests use the user ID (JWT subject); unauthenticated use the client IP.
 func keyFunc(r *http.Request, prefix string) string {
 	if claims, err := auth.ClaimsFromContext(r.Context()); err == nil {
 		return fmt.Sprintf("rl:%s:user:%s", prefix, claims.Subject)

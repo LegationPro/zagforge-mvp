@@ -8,16 +8,13 @@ import (
 	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
 	"github.com/LegationPro/zagforge/shared/go/store"
 )
 
-var (
-	errInternal        = errors.New("internal error")
-	errInvalidBody     = errors.New("invalid request body")
-	errSessionNotFound = errors.New("session not found")
-)
+var errSessionNotFound = errors.New("session not found")
 
 type Handler struct {
 	db  *dbpkg.DB
@@ -35,14 +32,14 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	user, err := h.db.Queries.GetUserByID(r.Context(), userID)
 	if err != nil {
 		h.log.Error("get user", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
 	memberships, err := h.db.Queries.ListMembershipsByUser(r.Context(), userID)
 	if err != nil {
 		h.log.Error("list memberships", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -58,7 +55,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 	body, err := httputil.DecodeJSON[updateProfileRequest](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 
@@ -77,7 +74,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		h.log.Error("update user", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -99,7 +96,7 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.Queries.DeleteUser(r.Context(), userID); err != nil {
 		h.log.Error("delete user", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -113,7 +110,7 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	sessions, err := h.db.Queries.ListSessionsByUser(r.Context(), userID)
 	if err != nil {
 		h.log.Error("list sessions", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -143,7 +140,7 @@ func (h *Handler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 }
 
 type profileResponse struct {
-	User        store.User                      `json:"user"`
+	User        store.User                       `json:"user"`
 	Memberships []store.ListMembershipsByUserRow `json:"memberships"`
 }
 

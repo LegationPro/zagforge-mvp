@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 )
 
 func TestGenerateToken_Format(t *testing.T) {
@@ -36,8 +38,8 @@ func TestGenerateToken_Unique(t *testing.T) {
 }
 
 func TestSha256Hash_Deterministic(t *testing.T) {
-	h1 := sha256Hash("zf_ctx_abc")
-	h2 := sha256Hash("zf_ctx_abc")
+	h1 := handlerpkg.SHA256Hash("zf_ctx_abc")
+	h2 := handlerpkg.SHA256Hash("zf_ctx_abc")
 	if h1 != h2 {
 		t.Error("same input produced different hashes")
 	}
@@ -47,15 +49,15 @@ func TestSha256Hash_MatchesStdlib(t *testing.T) {
 	input := "zf_ctx_testtoken"
 	expected := sha256.Sum256([]byte(input))
 	want := hex.EncodeToString(expected[:])
-	got := sha256Hash(input)
+	got := handlerpkg.SHA256Hash(input)
 	if got != want {
-		t.Errorf("sha256Hash(%q) = %q, want %q", input, got, want)
+		t.Errorf("SHA256Hash(%q) = %q, want %q", input, got, want)
 	}
 }
 
 func TestSha256Hash_DifferentInputs(t *testing.T) {
-	h1 := sha256Hash("token_a")
-	h2 := sha256Hash("token_b")
+	h1 := handlerpkg.SHA256Hash("token_a")
+	h2 := handlerpkg.SHA256Hash("token_b")
 	if h1 == h2 {
 		t.Error("different inputs produced the same hash")
 	}
@@ -66,7 +68,7 @@ func TestGenerateToken_HashRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generateToken: %v", err)
 	}
-	hash := sha256Hash(tok)
+	hash := handlerpkg.SHA256Hash(tok)
 	if hash == "" {
 		t.Error("hash should not be empty")
 	}

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	dbpkg "github.com/LegationPro/zagforge/api/internal/db"
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	"github.com/LegationPro/zagforge/api/internal/middleware/auth"
 	"github.com/LegationPro/zagforge/api/internal/service/encryption"
 	"github.com/LegationPro/zagforge/shared/go/httputil"
@@ -16,8 +17,6 @@ import (
 
 var (
 	errMissingFields = errors.New("provider and raw_key are required")
-	errInvalidBody   = errors.New("invalid request body")
-	errInternal      = errors.New("internal error")
 	errKeyTooShort   = errors.New("raw_key must be at least 8 characters")
 )
 
@@ -38,7 +37,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	keys, err := h.db.Queries.ListAIProviderKeysByOrg(r.Context(), orgID)
 	if err != nil {
 		h.log.Error("list ai keys", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 	httputil.OkResponse(w, keys)
@@ -53,7 +52,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 		RawKey   string `json:"raw_key"`
 	}](r.Body)
 	if err != nil {
-		httputil.ErrResponse(w, http.StatusBadRequest, errInvalidBody)
+		httputil.ErrResponse(w, http.StatusBadRequest, handlerpkg.ErrInvalidBody)
 		return
 	}
 	if body.Provider == "" || body.RawKey == "" {
@@ -68,7 +67,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 	cipher, err := h.enc.Encrypt([]byte(body.RawKey))
 	if err != nil {
 		h.log.Error("encrypt ai key", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 
@@ -81,7 +80,7 @@ func (h *Handler) Upsert(w http.ResponseWriter, r *http.Request) {
 		KeyHint:   hint,
 	}); err != nil {
 		h.log.Error("upsert ai key", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -96,7 +95,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		OrgID: orgID, Provider: provider,
 	}); err != nil {
 		h.log.Error("delete ai key", zap.Error(err))
-		httputil.ErrResponse(w, http.StatusInternalServerError, errInternal)
+		httputil.ErrResponse(w, http.StatusInternalServerError, handlerpkg.ErrInternal)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

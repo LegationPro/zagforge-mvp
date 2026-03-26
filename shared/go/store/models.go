@@ -68,11 +68,11 @@ type Membership struct {
 }
 
 type Organization struct {
-	ID           pgtype.UUID
-	Slug         string
-	Name         string
-	CreatedAt    pgtype.Timestamptz
-	ZitadelOrgID string
+	ID        pgtype.UUID
+	Slug      string
+	Name      string
+	CreatedAt pgtype.Timestamptz
+	AuthOrgID string
 }
 
 type Repository struct {
@@ -87,13 +87,13 @@ type Repository struct {
 }
 
 type Session struct {
-	ID               pgtype.UUID
-	UserID           pgtype.UUID
-	ZitadelSessionID string
-	DeviceName       pgtype.Text
-	IpAddress        *netip.Addr
-	LastActiveAt     pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
+	ID            pgtype.UUID
+	UserID        pgtype.UUID
+	AuthSessionID string
+	DeviceName    pgtype.Text
+	IpAddress     *netip.Addr
+	LastActiveAt  pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
 }
 
 type Snapshot struct {
@@ -112,7 +112,7 @@ type Snapshot struct {
 
 type User struct {
 	ID            pgtype.UUID
-	ZitadelUserID string
+	AuthUserID    string
 	Username      string
 	Email         string
 	EmailVerified bool

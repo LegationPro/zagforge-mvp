@@ -1,12 +1,12 @@
 -- name: UpsertOrg :one
-INSERT INTO organizations (zitadel_org_id, slug, name)
+INSERT INTO organizations (auth_org_id, slug, name)
 VALUES ($1, $2, $3)
-ON CONFLICT (zitadel_org_id) DO UPDATE
+ON CONFLICT (auth_org_id) DO UPDATE
     SET name = EXCLUDED.name
 RETURNING *;
 
--- name: GetOrgByZitadelID :one
-SELECT * FROM organizations WHERE zitadel_org_id = $1;
+-- name: GetOrgByAuthID :one
+SELECT * FROM organizations WHERE auth_org_id = $1;
 
 -- name: GetOrganizationBySlug :one
 SELECT * FROM organizations WHERE slug = $1;

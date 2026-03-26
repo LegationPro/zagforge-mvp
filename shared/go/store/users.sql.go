@@ -20,8 +20,29 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const getUserByAuthID = `-- name: GetUserByAuthID :one
+SELECT id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE auth_user_id = $1
+`
+
+func (q *Queries) GetUserByAuthID(ctx context.Context, authUserID string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByAuthID, authUserID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.AuthUserID,
+		&i.Username,
+		&i.Email,
+		&i.EmailVerified,
+		&i.Phone,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE email = $1
+SELECT id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -29,7 +50,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ZitadelUserID,
+		&i.AuthUserID,
 		&i.Username,
 		&i.Email,
 		&i.EmailVerified,
@@ -42,7 +63,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE id = $1
+SELECT id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -50,7 +71,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ZitadelUserID,
+		&i.AuthUserID,
 		&i.Username,
 		&i.Email,
 		&i.EmailVerified,
@@ -63,7 +84,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE username = $1
+SELECT id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -71,28 +92,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ZitadelUserID,
-		&i.Username,
-		&i.Email,
-		&i.EmailVerified,
-		&i.Phone,
-		&i.AvatarUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getUserByZitadelID = `-- name: GetUserByZitadelID :one
-SELECT id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at FROM users WHERE zitadel_user_id = $1
-`
-
-func (q *Queries) GetUserByZitadelID(ctx context.Context, zitadelUserID string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByZitadelID, zitadelUserID)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.ZitadelUserID,
+		&i.AuthUserID,
 		&i.Username,
 		&i.Email,
 		&i.EmailVerified,
@@ -112,7 +112,7 @@ SET username       = COALESCE(NULLIF($1::text, ''), username),
     phone          = $4,
     avatar_url     = $5
 WHERE id = $6
-RETURNING id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at
+RETURNING id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at
 `
 
 type UpdateUserParams struct {
@@ -136,7 +136,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ZitadelUserID,
+		&i.AuthUserID,
 		&i.Username,
 		&i.Email,
 		&i.EmailVerified,
@@ -149,19 +149,19 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 }
 
 const upsertUser = `-- name: UpsertUser :one
-INSERT INTO users (zitadel_user_id, username, email, email_verified, phone, avatar_url)
+INSERT INTO users (auth_user_id, username, email, email_verified, phone, avatar_url)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (zitadel_user_id) DO UPDATE
+ON CONFLICT (auth_user_id) DO UPDATE
     SET username       = EXCLUDED.username,
         email          = EXCLUDED.email,
         email_verified = EXCLUDED.email_verified,
         phone          = EXCLUDED.phone,
         avatar_url     = EXCLUDED.avatar_url
-RETURNING id, zitadel_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at
+RETURNING id, auth_user_id, username, email, email_verified, phone, avatar_url, created_at, updated_at
 `
 
 type UpsertUserParams struct {
-	ZitadelUserID string
+	AuthUserID    string
 	Username      string
 	Email         string
 	EmailVerified bool
@@ -171,7 +171,7 @@ type UpsertUserParams struct {
 
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, upsertUser,
-		arg.ZitadelUserID,
+		arg.AuthUserID,
 		arg.Username,
 		arg.Email,
 		arg.EmailVerified,
@@ -181,7 +181,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.ZitadelUserID,
+		&i.AuthUserID,
 		&i.Username,
 		&i.Email,
 		&i.EmailVerified,

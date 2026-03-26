@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	handlerpkg "github.com/LegationPro/zagforge/api/internal/handler"
 	github "github.com/LegationPro/zagforge/shared/go/provider/github"
 	"go.uber.org/zap"
 )
@@ -25,7 +26,7 @@ var (
 	ErrFailedToReadBody = errors.New("failed to read body")
 	ErrPayloadTooLarge  = errors.New("payload too large")
 	ErrValidation       = errors.New("validation error")
-	ErrInternal         = errors.New("internal error")
+	ErrInternal         = handlerpkg.ErrInternal
 )
 
 // PushHandler receives a validated push event and delivery ID.
