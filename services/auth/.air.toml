@@ -3,14 +3,14 @@
 env_files = []
 root = "/app"
 testdata_dir = "testdata"
-tmp_dir = "/app/auth/tmp"
+tmp_dir = "/app/services/auth/tmp"
 
 [build]
   args_bin = []
-  bin = "/app/auth/tmp/server"
-  cmd = "cd /app/auth && go build -o ./tmp/server ./cmd/"
+  bin = "/app/services/auth/tmp/server"
+  cmd = "cd /app/services/auth && go build -o ./tmp/server ./cmd/"
   delay = 1000
-  entrypoint = ["/app/auth/tmp/server"]
+  entrypoint = ["/app/services/auth/tmp/server"]
   exclude_dir = ["assets", "tmp", "vendor", "testdata"]
   exclude_file = []
   exclude_regex = ["_test.go"]
@@ -18,7 +18,7 @@ tmp_dir = "/app/auth/tmp"
   follow_symlink = false
   full_bin = ""
   ignore_dangerous_root_dir = false
-  include_dir = ["auth", "shared/go"]
+  include_dir = ["services/auth", "services/shared/go"]
   include_ext = ["go", "tpl", "tmpl", "html"]
   include_file = []
   kill_delay = "0s"
