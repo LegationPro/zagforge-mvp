@@ -17,41 +17,35 @@ import (
 	uploadhandler "github.com/LegationPro/zagforge/api/internal/handler/upload"
 	"github.com/LegationPro/zagforge/api/internal/handler/watchdog"
 	"github.com/LegationPro/zagforge/api/internal/handler/webhook"
+	"github.com/LegationPro/zagforge/api/internal/routes"
 	"github.com/LegationPro/zagforge/api/internal/service"
 )
 
-type handlers struct {
-	health     *health.Handler
-	webhook    *webhook.Handler
-	api        *apihandler.Handler
-	callback   *callback.Handler
-	watchdog   *watchdog.Handler
-	githubAuth *githubauth.Handler
-	upload     *uploadhandler.Handler
-	contextURL *contexturlhandler.Handler
-	ctxTokens  *contexttokenshandler.Handler
-	aiKeys     *aikeyshandler.Handler
-	query      *queryhandler.Handler
-	account    *accounthandler.Handler
-	org        *orghandler.Handler
-}
-
-func initHandlers(d *deps, c *config.Config, log *zap.Logger) *handlers {
+func newRouteDeps(d *deps, c *config.Config, log *zap.Logger) *routes.Deps {
 	svc := service.NewJobService(d.database, log, d.enqueuer, d.signer)
 
-	return &handlers{
-		health:     health.NewHandler(d.pool),
-		webhook:    webhook.NewHandler(d.ch, svc, log),
-		api:        apihandler.NewHandler(d.database, log),
-		callback:   callback.NewHandler(d.database, d.ch, log),
-		watchdog:   watchdog.NewHandler(d.database, log),
-		githubAuth: githubauth.NewHandler(d.database, c.App.GithubAppSlug, log),
-		upload:     uploadhandler.NewHandler(d.database, d.gcsClient, log),
-		contextURL: contexturlhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, log),
-		ctxTokens:  contexttokenshandler.NewHandler(d.database, log),
-		aiKeys:     aikeyshandler.NewHandler(d.database, d.encSvc, log),
-		query:      queryhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, d.encSvc, log),
-		account:    accounthandler.NewHandler(d.database, log),
-		org:        orghandler.NewHandler(d.database, log),
+	return &routes.Deps{
+		Health:     health.NewHandler(d.pool),
+		Webhook:    webhook.NewHandler(d.ch, svc, log),
+		API:        apihandler.NewHandler(d.database, log),
+		Callback:   callback.NewHandler(d.database, d.ch, log),
+		Watchdog:   watchdog.NewHandler(d.database, log),
+		GithubAuth: githubauth.NewHandler(d.database, c.App.GithubAppSlug, log),
+		Upload:     uploadhandler.NewHandler(d.database, d.gcsClient, log),
+		ContextURL: contexturlhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, log),
+		CtxTokens:  contexttokenshandler.NewHandler(d.database, log),
+		AIKeys:     aikeyshandler.NewHandler(d.database, d.encSvc, log),
+		Query:      queryhandler.NewHandler(d.database, d.ctxCache, d.ch, d.gcsClient, d.encSvc, log),
+		Account:    accounthandler.NewHandler(d.database, log),
+		Org:        orghandler.NewHandler(d.database, log),
+
+		RDB:            d.rdb,
+		JWTPubKey:      d.jwtPubKey,
+		JWTIssuer:      c.App.JWTIssuer,
+		Signer:         d.signer,
+		CORSOrigins:    c.CORS.AllowedOrigins,
+		WatchdogSecret: c.App.WatchdogSecret,
+		CLIAPIKey:      c.App.CLIAPIKey,
+		Log:            log,
 	}
 }

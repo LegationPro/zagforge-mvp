@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/LegationPro/zagforge/auth/internal/config"
+	"github.com/LegationPro/zagforge/auth/internal/routes"
 	"github.com/LegationPro/zagforge/shared/go/logger"
 	"github.com/LegationPro/zagforge/shared/go/router"
 )
@@ -35,10 +36,10 @@ func run() error {
 	}
 	defer cleanup()
 
-	h := initHandlers(d, c, log)
+	rd := newRouteDeps(d, c, log)
 
 	r := router.New()
-	if err := registerRoutes(r, h, d.rdb, d.tokenSvc, log); err != nil {
+	if err := routes.Register(r, rd); err != nil {
 		return err
 	}
 
