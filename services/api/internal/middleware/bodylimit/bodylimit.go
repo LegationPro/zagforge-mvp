@@ -34,8 +34,7 @@ func hasBody(method string) bool {
 // HandleMaxBytesError checks if err is a max-bytes exceeded error and writes a 413 if so.
 // Returns true if handled.
 func HandleMaxBytesError(w http.ResponseWriter, err error) bool {
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		httputil.ErrResponse(w, http.StatusRequestEntityTooLarge, errBodyTooLarge)
 		return true
 	}
